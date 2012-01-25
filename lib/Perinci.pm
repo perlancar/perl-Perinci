@@ -10,13 +10,13 @@ package Perinci;
 
 =head1 DESCRIPTION
 
-Perinci is a set of Perl modules to implement B<Rinci>. It provides:
+Perinci is a set of Perl modules to implement L<Rinci> and L<Riap>. It provides:
 
 =over 4
 
 =item * a convention of where to put Rinci metadata in your code;
 
-=item * a common API to access them;
+=item * an API to access them (implement the L<Riap> protocol);
 
 =item * a function wrapper framework to implement many Rinci properties;
 
