@@ -16,8 +16,8 @@ sub new {
     bless [], $class;
 }
 
-my $re_var = qr/\A[A-Za-z_][A-Za-z_0-9]+\z/;
-my $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]+(::[A-Za-z_][A-Za-z_0-9]+)*\z/;
+my $re_var = qr/\A[A-Za-z_][A-Za-z_0-9]*\z/;
+my $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
 sub request {
     my ($self, $action, $uri, $extra) = @_;
@@ -28,12 +28,15 @@ sub request {
     $extra //= {};
     return [400, "Invalid extra arguments: must be hashref"]
         unless ref($extra) eq 'HASH';
-    for (keys %$extra) {
-        return [400, "Invalid request key '$_', ".
+    for my $k (keys %$extra) {
+        return [400, "Invalid request key '$k', ".
                     "please only use letters/numbers"]
-            unless $_ =~ $re_var;
-        $req->{$_} = $extra->{$_};
+            unless $k =~ $re_var;
+        $req->{$k} = $extra->{$k};
     }
+
+    $req->{v} //= 1.1;
+    return [500, "Protocol version not supported"] if $req->{v} ne '1.1';
 
     return [400, "Please specify action"] unless $action;
     return [400, "Invalid syntax in action, please only use letters/numbers"]
@@ -47,7 +50,6 @@ sub request {
     my $scheme = $uri->scheme;
     return [502, "Can't handle scheme '$scheme' in URI"]
         unless !$scheme || $scheme eq 'pm';
-
 
     # parse code entity from URI && load module
 
@@ -76,11 +78,20 @@ sub request {
     $req->{-module} = $module;
     $req->{-local}  = $local;
 
+    # check local
+    if (length $local) {
+    }
+
+    # set $req->{-type} and $req->{-acts}
+
     # handle action
 
     my $meth = "action_$action";
     return [502, "Action not implemented"] unless
         $self->can($meth);
+
+    #return [502, "Action not allowed for entity $req->{-type}"]
+    #    unless $actions ~~ @acts;
 
     $self->$meth($req);
 }
@@ -91,7 +102,21 @@ sub request {
 
 sub action_info {
     my ($self, $req) = @_;
-    [502, "Not yet implemented"];
+    my $path = $req->{uri}->path;
+    $path = "/$path" unless $path =~ m!^/!;
+    [200, "OK", {
+        v      => 1.1,
+        url    => "pm:$path",
+        type   => $req->{-type},
+        acts   => $req->{-acts},
+        ifmt   => ["perl"],
+        ofmt   => ["perl"],
+        srvurl => "pm:/",
+
+        peri_v     => $Perinci::Access::VERSION,
+        peri_mod   => $req->{-module},
+        peri_local => $req->{-local},
+    }];
 }
 
 sub action_meta {
