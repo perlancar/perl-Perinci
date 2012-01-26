@@ -5,11 +5,6 @@ package Perinci;
 1;
 # ABSTRACT: Use Rinci metadata in your Perl code
 
-=head1 SYNOPSIS
-
- # XXX
-
-
 =head1 DESCRIPTION
 
 Perinci is a set of Perl modules to implement L<Rinci> and L<Riap>. It provides:
