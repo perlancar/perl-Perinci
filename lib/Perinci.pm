@@ -61,8 +61,8 @@ preferably be pretty specific instead of too short and generic.
 
 =head2 What does Perinci mean?
 
-Perinci is taken from Indonesian word, meaning: specify, explain in more detail.
-It can also be an abbreviation for "B<Pe>rl implementation of B<Rinci>".
+Perinci is taken from Indonesian word, meaning: to specify, to explain in more
+detail. It can also be an abbreviation for "B<Pe>rl implementation of B<Rinci>".
 
 
 =head1 SEE ALSO
