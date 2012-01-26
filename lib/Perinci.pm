@@ -16,13 +16,13 @@ Perinci is a set of Perl modules to implement L<Rinci> and L<Riap>. It provides:
 
 =item * a convention of where to put Rinci metadata in your code;
 
-=item * an API to access them (implement the L<Riap> protocol);
+=item * an API to access them (implementing the L<Riap> protocol);
 
 =item * a function wrapper framework to implement many Rinci properties;
 
 =item * various other tools that utilize information in the metadata.
 
-Many of the modules are separated into separate Perl distributions, to enable
+Many of the modules are separated into their own Perl distributions, to enable
 quicker releases.
 
 If you want to install all Perinci:: distributions, look at L<Task::Perinci>.
