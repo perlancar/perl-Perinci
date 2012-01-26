@@ -1,5 +1,7 @@
 package Perinci;
 
+# VERSION
+
 1;
 # ABSTRACT: Use Rinci metadata in your Perl code
 
