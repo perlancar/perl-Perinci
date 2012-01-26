@@ -47,6 +47,10 @@ L<Perinci::Sub::To::HTML>, or L<Perinci::Sub::To::Text>.
 
 B<Perinci::Sub::From::*> modules convert other stuffs to function metadata.
 
+B<Perinci::Package::*> relate to package metadata and/or Perl packages.
+
+B<Perinci::Var::*> relate to variable metadata and/or Perl variables.
+
 B<Perinci::HTTP::*> are modules that relate to L<Riap::HTTP> protocol.
 
 Command-line programs are usually prefixed with B<peri-*> to avoid name clashes
