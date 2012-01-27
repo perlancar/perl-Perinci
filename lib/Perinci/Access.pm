@@ -78,7 +78,7 @@ sub request {
     $req->{-module} = $module;
     $req->{-local}  = $local;
 
-    # check local
+    # check local and type of
     if (length $local) {
     }
 
@@ -164,8 +164,7 @@ sub action_complete {
 
 =head1 DESCRIPTION
 
-This class implements Rinci access protocol (L<Riap>) to access local Perl
-code.
+This class implements Rinci access protocol (L<Riap>) to access local Perl code.
 
 
 =head1 METHODS
