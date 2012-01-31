@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 1;
-# ABSTRACT: Wrapper for Riap clients
+# ABSTRACT: Wrapper for Perinci Riap clients
 
 =head1 SYNOPSIS
 
