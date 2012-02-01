@@ -106,7 +106,8 @@ sub action_call {
     no strict 'refs';
     my $code = \&{$req->{-module} . "::" . $req->{-leaf}};
     # XXX wrap
-    $code->();
+    my $args = $req->{args} // {};
+    $code->(%$args);
 }
 
 sub action_complete {
