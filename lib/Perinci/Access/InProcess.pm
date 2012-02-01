@@ -1,4 +1,4 @@
-package Perinci::Access;
+package Perinci::Access::InProcess;
 
 use 5.010;
 use strict;
@@ -6,94 +6,67 @@ use warnings;
 
 use Module::Load;
 use Module::Loaded;
-use Scalar::Util qw(blessed);
-use URI;
+
+use parent qw(Perinci::Access::Base);
 
 # VERSION
 
-sub new {
-    my ($class, %opts) = @_;
-    bless [], $class;
-}
+our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
-my $re_var = qr/\A[A-Za-z_][A-Za-z_0-9]*\z/;
-my $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
+sub _prehandle {
+    my ($self, $req) = @_;
 
-sub request {
-    my ($self, $action, $uri, $extra) = @_;
-    my $req = {};
+    # parse code entity from URI (cache the result in the request object) & load
+    # module
 
-    # check args
+    my $path = $req->{uri}->path || "/";
+    $req->{-path} = $path;
 
-    $extra //= {};
-    return [400, "Invalid extra arguments: must be hashref"]
-        unless ref($extra) eq 'HASH';
-    for my $k (keys %$extra) {
-        return [400, "Invalid request key '$k', ".
-                    "please only use letters/numbers"]
-            unless $k =~ $re_var;
-        $req->{$k} = $extra->{$k};
-    }
-
-    $req->{v} //= 1.1;
-    return [500, "Protocol version not supported"] if $req->{v} ne '1.1';
-
-    return [400, "Please specify action"] unless $action;
-    return [400, "Invalid syntax in action, please only use letters/numbers"]
-        unless $action =~ $re_var;
-    $req->{action} = $action;
-
-    return [400, "Please specify URI"] unless $uri;
-    $uri = URI->new($uri) unless blessed($uri);
-    $req->{uri} = $uri;
-
-    my $scheme = $uri->scheme;
-    return [502, "Can't handle scheme '$scheme' in URI"]
-        unless !$scheme || $scheme eq 'pm';
-
-    # parse code entity from URI && load module
-
-    my $path = $uri->path || "/";
-    my ($module, $local);
+    my ($package, $module, $leaf);
     if ($path eq '/') {
-        $module = '';
-        $local  = '';
-    } elsif ($path =~ m!(.+)/+(.*)!) {
-        $module = $1;
-        $local  = $2;
+        $package = '/';
+        $leaf    = '';
+        $module  = 'main';
     } else {
-        $module = $path;
-        $local  = '';
+        if ($path =~ m!(.+)/+(.*)!) {
+            $package = $1;
+            $leaf    = $2;
+        } else {
+            $package = $path;
+            $leaf    = '';
+        }
+        $module = $package;
+        $module =~ s!^/+!!g;
+        $module =~ s!/+!::!g;
     }
-    $module =~ s!^/+!!;
-    $module =~ s!/+!::!g;
+
     return [400, "Invalid syntax in module '$module', ".
                 "please use valid module name"]
-        if $module ne '' && $module !~ $re_mod;
+        if $module !~ $re_mod;
 
-    unless (is_loaded $module) {
+    unless ($module eq 'main' || is_loaded($module)) {
         eval { load $module };
         return [500, "Can't load module $module: $@"] if $@;
     }
-    $req->{-module} = $module;
-    $req->{-local}  = $local;
+    $req->{-package} = $package;
+    $req->{-leaf}    = $leaf;
+    $req->{-module}  = $module;
 
-    # check local and type of
-    if (length $local) {
+    # find out type of leaf
+    my $type;
+    if ($leaf) {
+        if ($leaf =~ /^[%\@\$]/) {
+            $type = 'variable';
+            # XXX check existence of variable
+        } else {
+            $type = 'function';
+        }
+    } else {
+        $type = 'package';
     }
+    $req->{-type} = $type;
 
-    # set $req->{-type} and $req->{-acts}
-
-    # handle action
-
-    my $meth = "action_$action";
-    return [502, "Action not implemented"] unless
-        $self->can($meth);
-
-    #return [502, "Action not allowed for entity $req->{-type}"]
-    #    unless $actions ~~ @acts;
-
-    $self->$meth($req);
+    0;
 }
 
 =for Pod::Coverage ^action_.+
@@ -102,41 +75,44 @@ sub request {
 
 sub action_info {
     my ($self, $req) = @_;
-    my $path = $req->{uri}->path;
-    $path = "/$path" unless $path =~ m!^/!;
     [200, "OK", {
-        v      => 1.1,
-        url    => "pm:$path",
-        type   => $req->{-type},
-        acts   => $req->{-acts},
-        ifmt   => ["perl"],
-        ofmt   => ["perl"],
-        srvurl => "pm:/",
-
-        peri_v     => $Perinci::Access::VERSION,
-        peri_mod   => $req->{-module},
-        peri_local => $req->{-local},
+        v    => 1.1,
+        uri  => $req->{uri}->as_string,
+        type => $req->{-type},
     }];
 }
 
 sub action_meta {
     my ($self, $req) = @_;
-    [502, "Not yet implemented"];
+
+    no strict 'refs';
+    my $ma;
+    $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
+        $self->{meta_accessor} // "Perinci::Access::InProcess::MetaAccessor";
+    load $ma;
+    my $meta = $ma->get_meta($req);
+    $meta ? [200, "OK", $meta] : [404, "No metadata found for entity"];
 }
 
 sub action_list {
     my ($self, $req) = @_;
-    [502, "Not yet implemented"];
+    return [502, "Not yet implemented"] unless $req->{-type} eq 'package';
+    [502, "Not yet implemented (2)"];
 }
 
 sub action_call {
     my ($self, $req) = @_;
-    [502, "Not yet implemented"];
+    return [502, "Not yet implemented"] unless $req->{-type} eq 'function';
+    no strict 'refs';
+    my $code = \&{$req->{-module} . "::" . $req->{-leaf}};
+    # XXX wrap
+    $code->();
 }
 
 sub action_complete {
     my ($self, $req) = @_;
-    [502, "Not yet implemented"];
+    return [502, "Not yet implemented"] unless $req->{-type} eq 'function';
+    [502, "Not yet implemented (2)"];
 }
 
 1;
@@ -144,46 +120,175 @@ sub action_complete {
 
 =head1 SYNOPSIS
 
- use Perinci::Access;
- my $pa = Perinci::Access->new();
+ # in Your/Module.pm
 
- # list all packages
- my $res = $pa->request(list => '/', {type=>'package', recursive=>1});
- die "Failed: $res->[0] - $res->[1]" unless $res->[0] == 200;
+ package My::Module;
+ our %SPEC;
 
- # get summary for each package
- for my $uri (@{$res->[2]}) {
-     $res = $pa->request(meta => $uri);
-     my $meta = $res->[2];
-     print "$uri - ", ($meta ? $meta->{summary} : "(No meta)"), "\n";
+ $SPEC{mult2} = {
+     v => 1.1,
+     summary => 'Multiple two numbers',
+     args => {
+         a => { schema=>'float*', req=>1, pos=>0 },
+         b => { schema=>'float*', req=>1, pos=>1 },
+     },
+     examples => [
+         {args=>{a=>2, b=>3}, result=>6},
+     ],
+ };
+ sub mult {
+     my %args = @_;
+     [200, "OK", $args{a} * $args{b}];
  }
 
- # call a function
- $res = $pa->request(call => '/Foo/Bar/func', {args => {a=>1, b=>2}});
+ $SPEC{multn} = {
+     v => 1.1,
+     summary => 'Multiple many numbers',
+     args => {
+         n => { schema=>[array=>{of=>'float*'}], req=>1, pos=>0, greedy=>1 },
+     },
+ };
+ sub multn {
+     my %args = @_;
+     my @n = @{$args{n}};
+     my $res = 0;
+     if (@n) {
+         $res = shift(@n);
+         $res *= $_ while $_ = shift(@n);
+     }
+     return [200, "OK", $res];
+ }
+
+ 1;
+
+ # in another file
+
+ use Perinci::Access::InProcess;
+ my $pa = Perinci::Access::Process->new();
+
+ # list all functions in package
+ my $res = $pa->request(list => '/My/Module/', {type=>'function'});
+ # -> [200, "OK", ['/My/Module/mult2', '/My/Module/mult2']]
+
+ # call function
+ my $res = $pa->request(call => '/My/Module/mult2', {args=>{a=>2, b=>3}});
+ # -> [200, "OK", 6]
+
+ # get function metadata
+ $res = $pa->request(meta => '/Foo/Bar/multn');
+ # -> [200, "OK", {v=>1.1, summary=>'Multiple many numbers', ...}]
 
 
 =head1 DESCRIPTION
 
 This class implements Rinci access protocol (L<Riap>) to access local Perl code.
+This might seem like a long-winded and slow way to access things that are
+already accessible from Perl like functions and metadata (in C<%SPEC>). Indeed,
+if you do not need Riap, you can access your module just like any normal Perl
+module.
+
+The abstraction provides some benefits, still. For example, you can actually
+place metadata not in C<%SPEC> but elsewhere, like in another file or even
+database, or even by merging from several sources. By using this module, you
+don't have to change client code. This class also does some function wrapping to
+convert argument passing style or produce result envelope, so you a consistent
+interface.
+
+=head2 Functions not accepting hash arguments
+
+As can be seen from the Synopsis, Perinci expects functions to accept arguments
+as hash and return enveloped result. You can actually accept arguments as array
+by adding C<_perinci.args_as> => C<array> metadata property. When wrapping,
+L<Perinci::Sub::Wrapper> can add a conversion code so your function gets an
+array. Note that you need to defined C<pos> for all your arguments. Example:
+
+ $SPEC{is_palindrome} = {
+     v => 1.1,
+     summary => 'Multiple two numbers',
+     args => {
+         a => { schema=>'float*', req=>1, pos=>0 },
+         b => { schema=>'float*', req=>1, pos=>1 },
+     },
+ };
+ sub mult2 {
+     my ($a, $b) = @_;
+     [200, "OK", $a*$b];
+ }
+
+ # called without wrapping
+ mult2(2, 3); # -> [200,"OK",6]
+
+ # called after wrapping, can still accept hash arguments
+ mult2(a=>2, b=>3); # -> [200,"OK",6]
+
+=head2 Functions not returning enveloped result
+
+Likewise, you can set C<_perinci.add_envelope> => 1 so that the wrapper adds
+envelope to function result.
+
+ $SPEC{is_palindrome} = {
+     v => 1.1,
+     summary                 => 'Check whether a string is a palindrome',
+     args                    => {str => {schema=>'str*'}},
+     result                  => {schema=>'bool*'},
+     "_perinci.add_envelope" => 1,
+ };
+ sub is_palindrome {
+     my %args = @_;
+     my $str  = $args{str};
+     $str eq reverse($str);
+ }
+
+ # called without wrapping
+ is_palindrome(str=>"kodok"); # 1
+
+ # called after wrapping, wrapper adds envelope
+ is_palindrome(str=>"kodok"); # [200,"OK",1]
+
+=head2 Location of metadata
+
+By default, the metadata should be put in C<%SPEC> package variable, in a key
+with the same name as the URI path leaf (use C<:package>) for the package
+itself). For example, metadata for C</Foo/Bar/$var> should be put in
+C<$Foo::Bar::SPEC{'$var'}>, C</Foo/Bar/> in C<$Foo::Bar::SPEC{':package'}. The
+metadata for the top-level namespace (C</>) should be put in
+C<$main::SPEC{':package'}>.
+
+If you want to put metadata elsewhere, you can pass C<meta_accessor> =>
+C<'Custom_Class'> to constructor argument, or set this in your module:
+
+ our $PERINCI_META_ACCESSOR = 'Custom::Class';
+
+The default accessor class is L<Perinci::Access::InProcess::MetaAccessor>.
+Alternatively, you can simply devise your own system to retrieve metadata which
+you can put in C<%SPEC> at the end.
 
 
 =head1 METHODS
 
 =head2 PKG->new(%opts) => OBJ
 
-Instantiate object.
+Instantiate object. Known options:
+
+=over 4
+
+=item * meta_accessor => STR
+
+=back
 
 =head2 $pa->request($action => $uri, \%extra) => $res
 
 Process Riap request and return enveloped result. This method will in turn parse
-URI and other Riap request keys and call C<action_ACTION> methods.
+URI and other Riap request keys into C<$req> hash, and then call
+C<action_ACTION> methods.
 
 
 =head1 FAQ
 
 =head1 Why %SPEC?
 
-It is for historical reason (name chosen during Sub::Spec era).
+The name was first chosen when during Sub::Spec era, so it stuck. You can change
+it though.
 
 
 =head1 SEE ALSO

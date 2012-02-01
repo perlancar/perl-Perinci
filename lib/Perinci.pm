@@ -14,135 +14,73 @@ See details on CPAN.
 =head1 DESCRIPTION
 
 Perinci is a collection of modules for implementing/providing tools pertaining
-to L<Rinci> and L<Riap>.
+to L<Rinci> and L<Riap>, spread over several distributions for faster
+incremental releases. These tools include:
 
-=head2 Module organization
+=over 4
 
-B<Perinci::Access::*> are implementation of L<Riap>, for example:
-L<Perinci::Access::InProcess>, L<Perinci::Access::HTTP::Server> (a.k.a.
-L<Serabi>), L<Perinci::Access::HTTP::Client>, L<Perinci::Access::TCP::Server>,
-L<Perinci::Access::TCP::Client>.
+=item * Wrapper
 
-L<Perinci::Access> itself is an easy wrapper for the various Perinci::Access::*
-clients. It can select the appropriate class based on the URI scheme.
+L<Perinci::Sub::Wrapper> is the subroutine wrapper which implements/enforces
+many of the metadata properties, like argument validation (using information in
+C<args>) as well as offers features like convert argument passing style,
+automatically envelope function result, etc.
 
-B<Perinci::Sub::*> are modules that relate to function metadata and/or Perl
-subroutines. They are further divided:
+It is extensible so you can implement your properties too (e.g. C<timeout>).
 
-B<Perinci::Sub::Gen::*> are modules that generate functions and/or function
-metadata. Examples are L<Perinci::Sub::Gen::AccessTable> and
-L<Perinci::Sub::Gen::ForModule>.
+=item * Riap clients and servers (Perinci::Access::*)
 
-B<Perinci::Package::*> relate to package metadata and/or Perl packages.
+L<Perinci::Access::InProcess> is a client/server (well, neither really, since
+everything is in-process) to access Perl modules/functions using the Riap
+protocol. It is basically a way to call your modules/functions using URI syntax;
+it also dictates a bit on how you should write your functions and where to put
+the metadata, though it provides a lot of flexibility.
 
-B<Perinci::Var::*> relate to variable metadata and/or Perl variables.
+L<Perinci::Access::HTTP::Client> and L<Perinci::Access::HTTP::Server> (a.k.a.
+L<Serabi>) is a pair of client/server library to access Perl modules/functions
+using Riap over HTTP, implementing the L<Riap::HTTP> specification.
 
-B<Perinci::To::*> modules convert metadata to other stuffs. B<Perinci::From::*>
-on the other hand convert other stuffs to metadata. B<Perinci::Sub::To::*> and
-B<Perinci::Sub::From::*> are similar to their ::To::* and ::From::* counterparts
-but handle function metadata specifically. For example L<Perinci::Sub::To::POD>,
-L<Perinci::Sub::To::HTML>, or L<Perinci::Sub::To::Text>. There will also be
-equivalents for other types of metadata.
+L<Perinci::Access::TCP::Client> and L<Perinci::Access::TCP::Server> is a pair of
+client/server library to access Perl modules/functions using Riap over TCP,
+implementing the L<Riap::TCP> specification.
 
-B<Perinci::Sub::From::*> modules convert other stuffs to function metadata.
-There will also be equivalents for other types of metadata.
+L<Perinci::Access> is a simple wrapper for all Riap clients, you give it a
+URL/module name/whatever and it will try to select the appropriate Riap client
+for you.
 
-Command-line programs are usually prefixed with B<peri-*> to avoid name clashes
-with other Rinci implementations (like those in PHP or Ruby), for example
-B<peri-test-examples> in L<Perinci::Sub::Examples>. However there maybe
-exceptions to avoid names being too long; when those happen the names should
-preferably be pretty specific instead of too short and generic.
+=item * Command-line libraries
 
+L<Perinci::CmdLine> is an extensible and featureful command-line library to
+create command-line programs and API clients. Features include: transparent
+remote access (thanks to Riap::HTTP), command-line options parsing, --help
+message, shell tab completion, etc.
 
-=head1 GETTING STARTED
+=item * Documentation tools
 
-To get started, you'll need to put some metadata in your code, mostly for your
-functions. The metadata normally goes to %SPEC package variable. Example:
+See CPAN for L<Perinci::Package::To::POD>, L<Perinci::Sub::To::POD>,
+L<Perinci::Sub::To::Text::Usage>, L<Perinci::Sub::To::HTML>, and other
+Perinci::To::* modules.
 
- package My::App;
+=item * Function/metadata generators
 
- our %SPEC;
+These are convenient tools to generate common/generic function and/or metadata.
+For example, L<Perinci::Sub::Gen::AccessTable> can generate accessor function +
+metadata for table data.
 
- $SPEC{mult2} = {
-     v => 1.1,
-     summary => 'Multiple two numbers',
-     args => {
-         a => { schema=>'float*', req=>1, pos=>0 },
-         b => { schema=>'float*', req=>1, pos=>1 },
-     },
-     examples => [
-         {args=>{a=>2, b=>3}, result=>6},
-     ],
- };
- sub mult {
-     my %args = @_;
-     [200, "OK", $args{a} * $args{b}];
- }
+See CPAN for more Perinci::Sub::Gen::* modules.
 
- $SPEC{multn} = {
-     v => 1.1,
-     summary => 'Multiple many numbers',
-     args => {
-         n => { schema=>[array=>{of=>'float*'}], req=>1, pos=>0, greedy=>1 },
-     },
- };
- sub multn {
-     my %args = @_;
-     my @n = @{$args{n}};
-     my $res = 0;
-     if (@n) {
-         $res = shift(@n);
-         $res *= $_ while $_ = shift(@n);
-     }
-     return [200, "OK", $res];
- }
+=item * Others
 
- 1;
+Samples: L<Perinci::Use>, L<Perinci::Exporter>.
 
-For the specification of the metadata itself, head over to L<Rinci>. You can
-also peek into modules that already have metadata. A few examples:
-L<Git::Bunch>, L<File::RsyBak>, L<Setup::File>.
+See CPAN for more Perinci::* modules.
 
-With Perinci you are actually given flexibility, you can store your metadata in
-other places if you want. See L<Perinci::Access::InProcess> for more details.
+=back
 
-You might also notice that instead of just returning C<$args{a} * $args{b}> we
-return an enveloped result: C<[200, "OK", $args{a} * $args{b}]>. This is not
-absolutely necessary (e.g. if you use a wrapper like L<Perinci::Sub::Wrapper> it
-can generate envelope for you), but envelope allows you to return error
-code/message as well as extra metadata. This will be useful in various
-situation. To read more about result envelope, see L<Rinci::function>.
-
-Now that the metadata are written, you can various tools that leverage the
-metadata. For example L<Perinci::CmdLine> that can turn your module into a
-command-line program:
-
- # in myapp script
- use Perinci::CmdLine qw(run);
- run(uri=>'/My/App/');
-
- # in shell
- % ./myapp --help
- % ./myapp --list
- % ./myapp mult2 --help
- % ./myapp mult2 2 3
- % ./myapp mult2 --a 2 --b 3
- % ./myapp multn 2 3 4
-
-There is also L<Perinci::Access::HTTP::Server> to run your module over HTTP:
-
- # start HTTP server
- % peri-run-http My::App
-
- # access your module over HTTP
- % curl http://localhost:5000/My::App/mult2?a=2&b=3
-
-To generate documentation from your metadata in a module:
-
- % peri-doc My::App
- % peri-doc http://localhost:5000/My::App/ ; # can access metadata remotely
-
-There are a lot more than this. See all the Perinci::* modules on CPAN.
+To get started, read L<Perinci::Access::InProcess> which will tell you on how to
+write your functions and where to put the metadata. Or, if you only want to
+access existing code/metadata, head over to L<Perinci::Access> or
+L<Perinci::CmdLine>.
 
 
 =head1 FAQ
@@ -158,3 +96,6 @@ detail. It can also be an abbreviation for "B<Pe>rl implementation of B<Rinci>".
 L<Rinci>
 
 =cut
+
+
+
