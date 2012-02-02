@@ -36,9 +36,9 @@ protocol. It is basically a way to call your modules/functions using URI syntax;
 it also dictates a bit on how you should write your functions and where to put
 the metadata, though it provides a lot of flexibility.
 
-L<Perinci::Access::HTTP::Client> and L<Perinci::Access::HTTP::Server> (a.k.a.
-L<Serabi>) is a pair of client/server library to access Perl modules/functions
-using Riap over HTTP, implementing the L<Riap::HTTP> specification.
+L<Perinci::Access::HTTP::Client> and L<Perinci::Access::HTTP::Server> is a pair
+of client/server library to access Perl modules/functions using Riap over HTTP,
+implementing the L<Riap::HTTP> specification.
 
 L<Perinci::Access::TCP::Client> and L<Perinci::Access::TCP::Server> is a pair of
 client/server library to access Perl modules/functions using Riap over TCP,
