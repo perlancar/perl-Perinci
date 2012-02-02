@@ -198,10 +198,10 @@ interface.
 =head2 Functions not accepting hash arguments
 
 As can be seen from the Synopsis, Perinci expects functions to accept arguments
-as hash. You can actually accept arguments as array
-by adding C<_perl.accept_args> => C<array> metadata property. When wrapping,
-L<Perinci::Sub::Wrapper> can add a conversion code so your function gets an
-array. Note that you need to defined C<pos> for all your arguments. Example:
+as hash. If your function accepts arguments from array, add C<args_as> =>
+C<array> to your metadata property. When wrapping, L<Perinci::Sub::Wrapper> can
+add a conversion code so that the function wrapper accepts hash as normal, but
+your function still gets an array. Example:
 
  $SPEC{is_palindrome} = {
      v => 1.1,
@@ -225,19 +225,16 @@ array. Note that you need to defined C<pos> for all your arguments. Example:
 
 =head2 Functions not returning enveloped result
 
-Likewise, by default Perinci assumes your function returns enveloped result. and
-return enveloped result
-
-you can set C<_perl.envelope_result> => 0 to declare that function
-does not envelope result, so that the wrapper can add code to create envelope
-for the function result.
+Likewise, by default Perinci assumes your function returns enveloped result. But
+if your function does not, you can set C<result_naked> => 1 to declare that. The
+wrapper code can add code to create envelope for the function result.
 
  $SPEC{is_palindrome} = {
      v => 1.1,
      summary                 => 'Check whether a string is a palindrome',
      args                    => {str => {schema=>'str*'}},
      result                  => {schema=>'bool*'},
-     "_perl.envelope_result" => 0,
+     result_naked            => 1,
  };
  sub is_palindrome {
      my %args = @_;
