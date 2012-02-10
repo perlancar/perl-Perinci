@@ -26,7 +26,7 @@ many of the metadata properties, like argument validation (using information in
 C<args>) as well as offers features like convert argument passing style,
 automatically envelope function result, etc.
 
-It is extensible so you can implement your properties too (e.g. C<timeout>).
+It is extensible so you can implement wrapper for your properties too.
 
 =item * Riap clients and servers (Perinci::Access::*)
 
@@ -81,6 +81,15 @@ To get started, read L<Perinci::Access::InProcess> which will tell you on how to
 write your functions and where to put the metadata. Or, if you only want to
 access existing code/metadata, head over to L<Perinci::Access> or
 L<Perinci::CmdLine>.
+
+To declare and implement a new function metadata property, see example in one of
+the C<Perinci-Sub-property-*> modules, like L<Perinci::Sub::property::timeout>.
+
+To declare and implement a new function feature, see example in one of the
+C<Perinci-Sub-feature-*> modules, like L<Perinci::Sub::feature::foo>.
+
+To declare and implement a new function dependency type, see example in one of
+the C<Perinci-Sub-dep-*> modules, like L<Perinci::Sub::dep::pm>.
 
 
 =head1 FAQ
