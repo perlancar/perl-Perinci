@@ -2,9 +2,13 @@ package Perinci::Util;
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(add_property);
+our @EXPORT_OK = qw(
+                       declare_property
+                       declare_function_feature
+                       declare_function_dep
+               );
 
-sub add_property {
+sub declare_property {
     my %args = @_;
     my $type = $args{type};
     my $schema_var;
@@ -26,7 +30,7 @@ sub add_property {
 
 }
 
-sub add_function_feature {
+sub declare_function_feature {
     my %args = @_;
 
     require Rinci::Schema;
@@ -36,7 +40,7 @@ sub add_function_feature {
 
 }
 
-sub add_function_dep {
+sub declare_function_dep {
     my %args = @_;
 
     require Rinci::Schema;
@@ -49,3 +53,4 @@ sub add_function_dep {
 }
 
 1;
+# ABSTRACT: Utility routines
