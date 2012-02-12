@@ -6,6 +6,8 @@ use warnings;
 
 use Perinci::Util qw(declare_function_dep);
 
+# VERSION
+
 declare_function_dep(
     name => 'pm',
     schema => ['str*' => {}],
