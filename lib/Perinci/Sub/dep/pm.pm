@@ -22,7 +22,7 @@ declare_function_dep(
 );
 
 1;
-# ABSTRACT: Depends on a Perl module
+# ABSTRACT: Depend on a Perl module
 
 =head1 SYNOPSIS
 
