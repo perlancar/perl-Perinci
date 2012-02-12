@@ -8,6 +8,8 @@ our @EXPORT_OK = qw(
                        declare_function_dep
                );
 
+# VERSION
+
 sub declare_property {
     my %args   = @_;
     my $name   = $args{name}   or die "Please specify property's name";
@@ -42,11 +44,18 @@ sub declare_property {
     }
     ($bpp // $tpp)->{$name} = $schema;
 
-    if ($args{wrap_meta}) {
+    {
         require Perinci::Sub::Wrapper;
         no strict 'refs';
-        *{"Perinci::Sub::Wrapper::handlemeta_$name"} = sub { $args{wrap_meta} };
-        *{"Perinci::Sub::Wrapper::handle_$name"} = $args{wrap} if $args{wrap};
+        if ($args{wrapper}) {
+            *{"Perinci::Sub::Wrapper::handlemeta_$name"} =
+                sub { $args{wrapper}{meta} };
+            *{"Perinci::Sub::Wrapper::handle_$name"} =
+                $args{wrapper}{handler};
+        } else {
+            *{"Perinci::Sub::Wrapper::handlemeta_$name"} =
+                sub { {} };
+        }
     }
 }
 
