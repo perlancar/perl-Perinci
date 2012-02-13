@@ -13,7 +13,7 @@ use parent qw(Perinci::Access::Base);
 
 our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
-sub _prehandle {
+sub _before_action {
     my ($self, $req) = @_;
 
     # parse code entity from URI (cache the result in the request object) & load
