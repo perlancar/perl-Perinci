@@ -51,8 +51,8 @@ sub request {
     $req->{uri} = $uri;
 
     my $res;
-    if ($self->can("_before_command")) {
-        $res = $self->_before_command($req);
+    if ($self->can("_before_action")) {
+        $res = $self->_before_action($req);
         return $res if $res;
     }
     $res = $self->$meth($req);
