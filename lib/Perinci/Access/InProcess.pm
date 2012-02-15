@@ -4,10 +4,9 @@ use 5.010;
 use strict;
 use warnings;
 
-use Module::Load;
-use Module::Loaded;
-
 use parent qw(Perinci::Access::Base);
+
+use Perinci::Sub::Wrapper qw(wrap_sub);
 
 # VERSION
 
@@ -15,6 +14,7 @@ our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
 sub _before_action {
     my ($self, $req) = @_;
+    no strict 'refs';
 
     # parse code entity from URI (cache the result in the request object) & load
     # module
@@ -44,10 +44,13 @@ sub _before_action {
                 "please use valid module name"]
         if $module !~ $re_mod;
 
-    unless ($module eq 'main' || is_loaded($module)) {
-        eval { load $module };
-        return [500, "Can't load module $module: $@"] if $@;
-    }
+    my $module_p = $module;
+    $module_p =~ s!::!/!g;
+    $module_p .= ".pm";
+
+    # WISHLIST: cache negative result if someday necessary
+    eval { require $module_p };
+    return [404, "Can't find module $module"] if $@;
     $req->{-package} = $package;
     $req->{-leaf}    = $leaf;
     $req->{-module}  = $module;
@@ -56,9 +59,11 @@ sub _before_action {
     my $type;
     if ($leaf) {
         if ($leaf =~ /^[%\@\$]/) {
-            $type = 'variable';
             # XXX check existence of variable
+            $type = 'variable';
         } else {
+            return [404, "Can't find function $leaf in $module"]
+                unless defined &{"$module\::$leaf"};
             $type = 'function';
         }
     } else {
@@ -73,46 +78,56 @@ sub _before_action {
 
 =cut
 
-sub action_info {
-    my ($self, $req) = @_;
-    [200, "OK", {
-        v    => 1.1,
-        uri  => $req->{uri}->as_string,
-        type => $req->{-type},
-    }];
-}
-
+sub actionmeta_meta { { applies_to => ['*'], } }
 sub action_meta {
+    no strict 'refs';
+
     my ($self, $req) = @_;
 
-    no strict 'refs';
+    # XXX cache meta
+
     my $ma;
     $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
         $self->{meta_accessor} // "Perinci::Access::InProcess::MetaAccessor";
-    load $ma;
+    my $ma_p = $ma;
+    $ma_p =~ s!::!/!g;
+    $ma_p .= ".pm";
+    eval { require $ma_p };
+    return [500, "Can't load meta accessor module $ma"] if $@;
     my $meta = $ma->get_meta($req);
     $meta ? [200, "OK", $meta] : [404, "No metadata found for entity"];
 }
 
+sub actionmeta_list { { applies_to => ['package'], } }
 sub action_list {
     my ($self, $req) = @_;
-    return [502, "Not yet implemented"] unless $req->{-type} eq 'package';
     [502, "Not yet implemented (2)"];
 }
 
+sub actionmeta_call { { applies_to => ['function'], } }
 sub action_call {
     my ($self, $req) = @_;
-    return [502, "Not yet implemented"] unless $req->{-type} eq 'function';
     no strict 'refs';
     my $code = \&{$req->{-module} . "::" . $req->{-leaf}};
-    # XXX wrap
+
+    # XXX cache wrap
+
+    my $mres = $self->action_meta($req);
+    return $mres if $mres->[0] != 200;
+
+    my $wres = wrap_sub(sub=>$code, meta=>$mres->[2],
+                        convert=>{args_as=>'hash'});
+    return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
+        unless $wres->[0] == 200;
+    $code = $wres->[2]{sub};
+
     my $args = $req->{args} // {};
     $code->(%$args);
 }
 
+sub actionmeta_complete { { applies_to => ['function'], } }
 sub action_complete {
     my ($self, $req) = @_;
-    return [502, "Not yet implemented"] unless $req->{-type} eq 'function';
     [502, "Not yet implemented (2)"];
 }
 

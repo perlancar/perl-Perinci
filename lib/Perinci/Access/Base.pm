@@ -11,7 +11,9 @@ use URI;
 
 sub new {
     my ($class, %opts) = @_;
-    bless \%opts, $class;
+    my $obj = bless \%opts, $class;
+    $obj->_init();
+    $obj;
 }
 
 our $re_var     = qr/\A[A-Za-z_][A-Za-z_0-9]*\z/;
@@ -50,12 +52,57 @@ sub request {
     $uri = URI->new($uri) unless blessed($uri);
     $req->{uri} = $uri;
 
-    my $res;
-    if ($self->can("_before_action")) {
-        $res = $self->_before_action($req);
-        return $res if $res;
-    }
+    my $res = $self->_before_action($req);
+    return $res if $res;
+
+    return [502, "Action not implemented for '$req->{-type}' entity"]
+        unless $self->{_typeacts}{ $req->{-type} }{ $action };
+
     $res = $self->$meth($req);
+}
+
+sub _init {
+    require Class::Inspector;
+
+    my ($self) = @_;
+
+    # build a list of supported actions for each type of entity
+    my %typeacts; # key = type, val = [action, ...]
+    my @comacts;  # common actions
+
+    for my $meth (@{Class::Inspector->methods(ref $self)}) {
+        next unless $meth =~ /^actionmeta_(.+)/;
+        my $act = $1;
+        my $meta = $self->$meth();
+        for my $type (@{$meta->{applies_to}}) {
+            if ($type eq '*') {
+                push @comacts, $act;
+            } else {
+                push @{$typeacts{$type}}, $act;
+            }
+        }
+    }
+
+    for my $type (keys %typeacts) {
+        $typeacts{$type} = { map {$_=>{}} @{$typeacts{$type}}, @comacts };
+    }
+
+    $self->{_typeacts} = \%typeacts;
+}
+
+# can be overriden, should return a response on error, or false if nothing is
+# wrong.
+sub _before_action {}
+
+sub actionmeta_info { { applies_to => ['*'], } }
+sub action_info {
+    my ($self, $req) = @_;
+    [200, "OK", {
+        v    => 1.1,
+        uri  => $req->{uri}->as_string,
+        type => $req->{-type},
+        acts => [keys %{ $self->{_typeacts}{$req->{-type}} }],
+    }];
 }
 
 1;
