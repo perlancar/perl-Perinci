@@ -6,7 +6,9 @@ use warnings;
 
 use parent qw(Perinci::Access::Base);
 
+use Module::List;
 use Perinci::Sub::Wrapper qw(wrap_sub);
+use Tie::Cache;
 
 # VERSION
 
@@ -15,7 +17,6 @@ our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 sub _init {
     my ($self) = @_;
     $self->SUPER::_init();
-    require Tie::Cache;
     tie my(%cache), 'Tie::Cache', 100;
     $self->{_cache} = \%cache;
 }
@@ -34,7 +35,7 @@ sub _before_action {
     if ($path eq '/') {
         $package = '/';
         $leaf    = '';
-        $module  = 'main';
+        $module  = '';
     } else {
         if ($path =~ m!(.+)/+(.*)!) {
             $package = $1;
@@ -50,18 +51,20 @@ sub _before_action {
 
     return [400, "Invalid syntax in module '$module', ".
                 "please use valid module name"]
-        if $module !~ $re_mod;
+        if $module && $module !~ $re_mod;
 
-    my $module_p = $module;
-    $module_p =~ s!::!/!g;
-    $module_p .= ".pm";
+    if ($module) {
+        my $module_p = $module;
+        $module_p =~ s!::!/!g;
+        $module_p .= ".pm";
 
-    # WISHLIST: cache negative result if someday necessary
-    eval { require $module_p };
-    return [404, "Can't find module $module"] if $@;
-    $req->{-package} = $package;
-    $req->{-leaf}    = $leaf;
-    $req->{-module}  = $module;
+        # WISHLIST: cache negative result if someday necessary
+        eval { require $module_p };
+        return [404, "Can't find module $module"] if $@;
+        $req->{-package} = $package;
+        $req->{-leaf}    = $leaf;
+        $req->{-module}  = $module;
+    }
 
     # find out type of leaf
     my $type;
@@ -86,23 +89,33 @@ sub _before_action {
 
 =cut
 
+sub _get_meta_accessor {
+    my ($self, $req) = @_;
+
+    no strict 'refs';
+    my $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
+        $self->{meta_accessor} //
+            "Perinci::Access::InProcess::MetaAccessor";
+    my $ma_p = $ma;
+    $ma_p =~ s!::!/!g;
+    $ma_p .= ".pm";
+    eval { require $ma_p };
+    return [500, "Can't load meta accessor module $ma"] if $@;
+    [200, "OK", $ma];
+}
+
 sub _get_code_and_meta {
     no strict 'refs';
     my ($self, $req) = @_;
     my $name = $req->{-module} . "::" . $req->{-leaf};
     return @{$self->{_cache}{$name}} if $self->{_cache}{$name};
 
-    my $ma;
-    $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
-    $self->{meta_accessor} //
-        "Perinci::Access::InProcess::MetaAccessor";
-    my $ma_p = $ma;
-    $ma_p =~ s!::!/!g;
-    $ma_p .= ".pm";
-    eval { require $ma_p };
-    return [500, "Can't load meta accessor module $ma"] if $@;
+    my $res = $self->_get_meta_accessor($req);
+    return $res if $res->[0] != 200;
+    my $ma = $res->[2];
+
     my $meta = $ma->get_meta($req);
-    return [500, "Can't get metadata"] unless $meta;
+    return [404, "No metadata"] unless $meta;
 
     my $code = \&{$name};
     my $wres = wrap_sub(sub=>$code, meta=>$meta,
@@ -117,8 +130,8 @@ sub _get_code_and_meta {
 
 sub actionmeta_meta { { applies_to => ['*'], } }
 sub action_meta {
-
     my ($self, $req) = @_;
+    return [404, "No metadata for /"] unless $req->{-module};
     my $res = $self->_get_code_and_meta($req);
     return $res unless $res->[0] == 200;
     my (undef, $meta) = @{$res->[2]};
@@ -128,7 +141,49 @@ sub action_meta {
 sub actionmeta_list { { applies_to => ['package'], } }
 sub action_list {
     my ($self, $req) = @_;
-    [502, "Not yet implemented (2)"];
+    my $detail = $req->{detail};
+
+    my @res;
+
+    # get submodules
+    my $lres = Module::List::list_modules(
+        $req->{-module} ? "$req->{-module}\::" : "",
+        {list_modules=>1});
+    #my $m0 = $req->{-module};
+    my $p0 = $req->{-path};
+    $p0 =~ s!/+$!!;
+    for my $m (sort keys %$lres) {
+        $m =~ s!.+::!!;
+        my $uri = join("", "pm:", $p0, "/", $m, "/");
+        if ($detail) {
+            push @res, {uri=>$uri, type=>"package"};
+        } else {
+            push @res, $uri;
+        }
+    }
+
+    # get all entities from this module
+    my $res = $self->_get_meta_accessor($req);
+    return $res if $res->[0] != 200;
+    my $ma = $res->[2];
+    my $spec = $ma->get_all_meta($req);
+    my $base = "pm:/$req->{-module}"; $base =~ s!::!/!g;
+    for (sort keys %$spec) {
+        next if /^:/;
+        my $uri = join("", $base, "/", $_);
+        if ($detail) {
+            my $type = $_ =~ /^[%\@\$]/ ? 'variable' : 'function';
+            push @res, {
+                #v=>1.1,
+                uri=>$uri, type=>$type,
+                #acts=> [keys %{ $self->{_typeacts}{$type} }],
+            };
+        } else {
+            push @res, $uri;
+        }
+    }
+
+    [200, "OK", \@res];
 }
 
 sub actionmeta_call { { applies_to => ['function'], } }
