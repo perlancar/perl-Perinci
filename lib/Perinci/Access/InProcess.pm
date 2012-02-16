@@ -86,29 +86,43 @@ sub _before_action {
 
 =cut
 
+sub _get_code_and_meta {
+    no strict 'refs';
+    my ($self, $req) = @_;
+    my $name = $req->{-module} . "::" . $req->{-leaf};
+    return @{$self->{_cache}{$name}} if $self->{_cache}{$name};
+
+    my $ma;
+    $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
+    $self->{meta_accessor} //
+        "Perinci::Access::InProcess::MetaAccessor";
+    my $ma_p = $ma;
+    $ma_p =~ s!::!/!g;
+    $ma_p .= ".pm";
+    eval { require $ma_p };
+    return [500, "Can't load meta accessor module $ma"] if $@;
+    my $meta = $ma->get_meta($req);
+    return [500, "Can't get metadata"] unless $meta;
+
+    my $code = \&{$name};
+    my $wres = wrap_sub(sub=>$code, meta=>$meta,
+                        convert=>{args_as=>'hash', result_naked=>0});
+    return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
+        unless $wres->[0] == 200;
+    $code = $wres->[2]{sub};
+
+    $self->{_cache}{$name} = [$code, $meta];
+    [200, "OK", [$code, $meta]];
+}
+
 sub actionmeta_meta { { applies_to => ['*'], } }
 sub action_meta {
-    no strict 'refs';
 
     my ($self, $req) = @_;
-
-    my $name = $req->{-module} . "::" . $req->{-leaf};
-    my $meta;
-    if ($self->{_cache}{$name}) {
-        (undef, $meta) = @{$self->{_cache}{$name}};
-    } else {
-        my $ma;
-        $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
-            $self->{meta_accessor} //
-                "Perinci::Access::InProcess::MetaAccessor";
-        my $ma_p = $ma;
-        $ma_p =~ s!::!/!g;
-        $ma_p .= ".pm";
-        eval { require $ma_p };
-        return [500, "Can't load meta accessor module $ma"] if $@;
-        $meta = $ma->get_meta($req);
-    }
-    $meta ? [200, "OK", $meta] : [404, "No metadata found for entity"];
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my (undef, $meta) = @{$res->[2]};
+    [200, "OK", $meta];
 }
 
 sub actionmeta_list { { applies_to => ['package'], } }
@@ -120,26 +134,9 @@ sub action_list {
 sub actionmeta_call { { applies_to => ['function'], } }
 sub action_call {
     my ($self, $req) = @_;
-
-    my $name = $req->{-module} . "::" . $req->{-leaf};
-    my ($code, $meta);
-    if ($self->{_cache}{$name}) {
-        ($code, $meta) = @{$self->{_cache}{$name}};
-    } else {
-        no strict 'refs';
-        $code = \&{$name};
-
-        my $mres = $self->action_meta($req);
-        return $mres if $mres->[0] != 200;
-        $meta = $mres->[2];
-        my $wres = wrap_sub(sub=>$code, meta=>$meta,
-                            convert=>{args_as=>'hash'});
-        return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
-            unless $wres->[0] == 200;
-        $code = $wres->[2]{sub};
-
-        $self->{_cache}{$name} = [$code, $meta];
-    }
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my ($code, undef) = @{$res->[2]};
     my $args = $req->{args} // {};
     $code->(%$args);
 }
