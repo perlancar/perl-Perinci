@@ -6,15 +6,15 @@ use warnings;
 
 use parent qw(Perinci::Access::Base);
 
-use Module::List;
-use Perinci::Sub::Wrapper qw(wrap_sub);
-use Tie::Cache;
+use Data::Sah;
 
 # VERSION
 
 our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
 sub _init {
+    require Tie::Cache;
+
     my ($self) = @_;
     $self->SUPER::_init();
     tie my(%cache), 'Tie::Cache', 100;
@@ -105,6 +105,8 @@ sub _get_meta_accessor {
 }
 
 sub _get_code_and_meta {
+    require Perinci::Sub::Wrapper;
+
     no strict 'refs';
     my ($self, $req) = @_;
     my $name = $req->{-module} . "::" . $req->{-leaf};
@@ -118,8 +120,9 @@ sub _get_code_and_meta {
     return [404, "No metadata"] unless $meta;
 
     my $code = \&{$name};
-    my $wres = wrap_sub(sub=>$code, meta=>$meta,
-                        convert=>{args_as=>'hash', result_naked=>0});
+    my $wres = Perinci::Sub::Wrapper::wrap_sub(
+        sub=>$code, meta=>$meta,
+        convert=>{args_as=>'hash', result_naked=>0});
     return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
         unless $wres->[0] == 200;
     $code = $wres->[2]{sub};
@@ -128,18 +131,9 @@ sub _get_code_and_meta {
     [200, "OK", [$code, $meta]];
 }
 
-sub actionmeta_meta { { applies_to => ['*'], } }
-sub action_meta {
-    my ($self, $req) = @_;
-    return [404, "No metadata for /"] unless $req->{-module};
-    my $res = $self->_get_code_and_meta($req);
-    return $res unless $res->[0] == 200;
-    my (undef, $meta) = @{$res->[2]};
-    [200, "OK", $meta];
-}
-
-sub actionmeta_list { { applies_to => ['package'], } }
 sub action_list {
+    require Module::List;
+
     my ($self, $req) = @_;
     my $detail = $req->{detail};
 
@@ -186,9 +180,18 @@ sub action_list {
     [200, "OK", \@res];
 }
 
-sub actionmeta_call { { applies_to => ['function'], } }
+sub action_meta {
+    my ($self, $req) = @_;
+    return [404, "No metadata for /"] unless $req->{-module};
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my (undef, $meta) = @{$res->[2]};
+    [200, "OK", $meta];
+}
+
 sub action_call {
     my ($self, $req) = @_;
+
     my $res = $self->_get_code_and_meta($req);
     return $res unless $res->[0] == 200;
     my ($code, undef) = @{$res->[2]};
@@ -196,10 +199,17 @@ sub action_call {
     $code->(%$args);
 }
 
-sub actionmeta_complete { { applies_to => ['function'], } }
 sub action_complete {
     my ($self, $req) = @_;
-    [502, "Not yet implemented (2)"];
+    my $arg = $req->{arg} or return [400, "Please specify arg"];
+    my $word = $req->{word} // "";
+
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my (undef, $meta) = @{$res->[2]};
+    my $args_p = $meta->{args} // {};
+    my $arg_p = $args_p or return [404, "No such function arg"];
+
 }
 
 1;
@@ -280,59 +290,6 @@ database, or even by merging from several sources. By using this module, you
 don't have to change client code. This class also does some function wrapping to
 convert argument passing style or produce result envelope, so you a consistent
 interface.
-
-=head2 Functions not accepting hash arguments
-
-As can be seen from the Synopsis, Perinci expects functions to accept arguments
-as hash. If your function accepts arguments from array, add C<args_as> =>
-C<array> to your metadata property. When wrapping, L<Perinci::Sub::Wrapper> can
-add a conversion code so that the function wrapper accepts hash as normal, but
-your function still gets an array. Example:
-
- $SPEC{is_palindrome} = {
-     v => 1.1,
-     summary => 'Multiple two numbers',
-     args => {
-         a => { schema=>'float*', req=>1, pos=>0 },
-         b => { schema=>'float*', req=>1, pos=>1 },
-     },
- };
- sub mult2 {
-     my ($a, $b) = @_;
-     [200, "OK", $a*$b];
- }
-
- # called without wrapping
- mult2(2, 3); # -> [200,"OK",6]
-
- # called after wrapping, by default wrapper will convert hash arguments to
- # array for passing to the original function
- mult2(a=>2, b=>3); # -> [200,"OK",6]
-
-=head2 Functions not returning enveloped result
-
-Likewise, by default Perinci assumes your function returns enveloped result. But
-if your function does not, you can set C<result_naked> => 1 to declare that. The
-wrapper code can add code to create envelope for the function result.
-
- $SPEC{is_palindrome} = {
-     v => 1.1,
-     summary                 => 'Check whether a string is a palindrome',
-     args                    => {str => {schema=>'str*'}},
-     result                  => {schema=>'bool*'},
-     result_naked            => 1,
- };
- sub is_palindrome {
-     my %args = @_;
-     my $str  = $args{str};
-     $str eq reverse($str);
- }
-
- # called without wrapping
- is_palindrome(str=>"kodok"); # -> 1
-
- # called after wrapping, by default wrapper adds envelope
- is_palindrome(str=>"kodok"); # -> [200,"OK",1]
 
 =head2 Location of metadata
 

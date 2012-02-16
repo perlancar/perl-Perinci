@@ -105,5 +105,10 @@ sub action_info {
     }];
 }
 
+sub actionmeta_list { { applies_to => ['package'], } }
+sub actionmeta_meta { { applies_to => ['*'], } }
+sub actionmeta_call { { applies_to => ['function'], } }
+sub actionmeta_complete { { applies_to => ['function'], } }
+
 1;
 # ABSTRACT: Base class for Perinci Riap clients
