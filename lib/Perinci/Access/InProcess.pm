@@ -92,17 +92,22 @@ sub action_meta {
 
     my ($self, $req) = @_;
 
-    # XXX cache meta
-
-    my $ma;
-    $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
-        $self->{meta_accessor} // "Perinci::Access::InProcess::MetaAccessor";
-    my $ma_p = $ma;
-    $ma_p =~ s!::!/!g;
-    $ma_p .= ".pm";
-    eval { require $ma_p };
-    return [500, "Can't load meta accessor module $ma"] if $@;
-    my $meta = $ma->get_meta($req);
+    my $name = $req->{-module} . "::" . $req->{-leaf};
+    my $meta;
+    if ($self->{_cache}{$name}) {
+        (undef, $meta) = @{$self->{_cache}{$name}};
+    } else {
+        my $ma;
+        $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
+            $self->{meta_accessor} //
+                "Perinci::Access::InProcess::MetaAccessor";
+        my $ma_p = $ma;
+        $ma_p =~ s!::!/!g;
+        $ma_p .= ".pm";
+        eval { require $ma_p };
+        return [500, "Can't load meta accessor module $ma"] if $@;
+        $meta = $ma->get_meta($req);
+    }
     $meta ? [200, "OK", $meta] : [404, "No metadata found for entity"];
 }
 
