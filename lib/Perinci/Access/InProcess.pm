@@ -136,23 +136,27 @@ sub action_list {
 
     my ($self, $req) = @_;
     my $detail = $req->{detail};
+    my $f_type = $req->{type} || "";
 
     my @res;
 
+    # XXX recursive?
+
     # get submodules
-    my $lres = Module::List::list_modules(
-        $req->{-module} ? "$req->{-module}\::" : "",
-        {list_modules=>1});
-    #my $m0 = $req->{-module};
-    my $p0 = $req->{-path};
-    $p0 =~ s!/+$!!;
-    for my $m (sort keys %$lres) {
-        $m =~ s!.+::!!;
-        my $uri = join("", "pm:", $p0, "/", $m, "/");
-        if ($detail) {
-            push @res, {uri=>$uri, type=>"package"};
-        } else {
-            push @res, $uri;
+    unless ($f_type && $f_type ne 'package') {
+        my $lres = Module::List::list_modules(
+            $req->{-module} ? "$req->{-module}\::" : "",
+            {list_modules=>1});
+        my $p0 = $req->{-path};
+        $p0 =~ s!/+$!!;
+        for my $m (sort keys %$lres) {
+            $m =~ s!.+::!!;
+            my $uri = join("", "pm:", $p0, "/", $m, "/");
+            if ($detail) {
+                push @res, {uri=>$uri, type=>"package"};
+            } else {
+                push @res, $uri;
+            }
         }
     }
 
@@ -165,11 +169,12 @@ sub action_list {
     for (sort keys %$spec) {
         next if /^:/;
         my $uri = join("", $base, "/", $_);
+        my $t = $_ =~ /^[%\@\$]/ ? 'variable' : 'function';
+        next if $f_type && $f_type ne $t;
         if ($detail) {
-            my $type = $_ =~ /^[%\@\$]/ ? 'variable' : 'function';
             push @res, {
                 #v=>1.1,
-                uri=>$uri, type=>$type,
+                uri=>$uri, type=>$t,
                 #acts=> [keys %{ $self->{_typeacts}{$type} }],
             };
         } else {
