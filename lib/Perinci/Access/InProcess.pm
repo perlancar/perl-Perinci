@@ -12,6 +12,14 @@ use Perinci::Sub::Wrapper qw(wrap_sub);
 
 our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
+sub _init {
+    my ($self) = @_;
+    $self->SUPER::_init();
+    require Tie::Cache;
+    tie my(%cache), 'Tie::Cache', 100;
+    $self->{_cache} = \%cache;
+}
+
 sub _before_action {
     my ($self, $req) = @_;
     no strict 'refs';
@@ -107,20 +115,26 @@ sub action_list {
 sub actionmeta_call { { applies_to => ['function'], } }
 sub action_call {
     my ($self, $req) = @_;
-    no strict 'refs';
-    my $code = \&{$req->{-module} . "::" . $req->{-leaf}};
 
-    # XXX cache wrap
+    my $name = $req->{-module} . "::" . $req->{-leaf};
+    my ($code, $meta);
+    if ($self->{_cache}{$name}) {
+        ($code, $meta) = @{$self->{_cache}{$name}};
+    } else {
+        no strict 'refs';
+        $code = \&{$name};
 
-    my $mres = $self->action_meta($req);
-    return $mres if $mres->[0] != 200;
+        my $mres = $self->action_meta($req);
+        return $mres if $mres->[0] != 200;
+        $meta = $mres->[2];
+        my $wres = wrap_sub(sub=>$code, meta=>$meta,
+                            convert=>{args_as=>'hash'});
+        return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
+            unless $wres->[0] == 200;
+        $code = $wres->[2]{sub};
 
-    my $wres = wrap_sub(sub=>$code, meta=>$mres->[2],
-                        convert=>{args_as=>'hash'});
-    return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
-        unless $wres->[0] == 200;
-    $code = $wres->[2]{sub};
-
+        $self->{_cache}{$name} = [$code, $meta];
+    }
     my $args = $req->{args} // {};
     $code->(%$args);
 }
