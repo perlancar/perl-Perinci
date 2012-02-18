@@ -64,8 +64,17 @@ sub _before_action {
 
         # WISHLIST: cache negative result if someday necessary
         if ($self->{load}) {
-            eval { require $module_p };
-            return [404, "Can't find module $module"] if $@;
+            unless ($INC{$module_p}) {
+                eval { require $module_p };
+                if ($@) {
+                    return [404, "Can't find module $module"];
+                } else {
+                    if ($self->{after_load}) {
+                        eval { $self->{after_load}($self, module=>$module) };
+                        return [500, "after_load dies: $@"] if $@;
+                    }
+                }
+            }
         }
 
         $req->{-package} = $package;

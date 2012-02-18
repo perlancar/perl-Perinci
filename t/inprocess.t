@@ -16,6 +16,29 @@ sub f1 { [200, "OK", 2] }
 
 package main;
 
+# test after_load first, for first time loading of
+# Perinci::Examples
+my $var = 12;
+test_request(
+    name => 'opt: after_load called',
+    object_opts=>{after_load=>sub {$var++}},
+    req => [call => '/Perinci/Examples/noop'],
+    status => 200,
+    posttest => sub {
+        is($var, 13, "\$var incremented");
+    },
+);
+test_request(
+    name => 'opt: after_load not called twice',
+    object_opts=>{after_load=>sub {$var++}},
+    req => [call => '/Perinci/Examples/noop'],
+    status => 200,
+    posttest => sub {
+        is($var, 13, "\$var not incremented again");
+    },
+);
+# XXX test trapping of die in after_load
+
 test_request(
     name => 'unknown action',
     req => [zzz => "/"],
@@ -53,6 +76,7 @@ test_request(
     req => [meta => "/Perinci/Examples"],
     status => 404,
 );
+
 test_request(
     name => 'meta on function',
     req => [meta => "/Perinci/Examples/test_completion"],
