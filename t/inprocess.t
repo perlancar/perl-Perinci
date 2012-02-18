@@ -18,6 +18,7 @@ package main;
 
 # test after_load first, for first time loading of
 # Perinci::Examples
+
 my $var = 12;
 test_request(
     name => 'opt: after_load called',

@@ -126,7 +126,7 @@ sub _get_code_and_meta {
     no strict 'refs';
     my ($self, $req) = @_;
     my $name = $req->{-module} . "::" . $req->{-leaf};
-    return @{$self->{_cache}{$name}} if $self->{_cache}{$name};
+    return [200, "OK", $self->{_cache}{$name}] if $self->{_cache}{$name};
 
     my $res = $self->_get_meta_accessor($req);
     return $res if $res->[0] != 200;
