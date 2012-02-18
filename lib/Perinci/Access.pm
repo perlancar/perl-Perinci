@@ -8,8 +8,8 @@ use Scalar::Util qw(blessed);
 use URI;
 
 sub new {
-    my ($class, %args) = @_;
-    bless \%args, $class;
+    my ($class, %opts) = @_;
+    bless \%opts, $class;
 }
 
 sub request {
