@@ -401,7 +401,7 @@ C<action_ACTION> methods.
 
 =head1 FAQ
 
-=head1 Why %SPEC?
+=head2 Why %SPEC?
 
 The name was first chosen when during Sub::Spec era, so it stuck.
 
