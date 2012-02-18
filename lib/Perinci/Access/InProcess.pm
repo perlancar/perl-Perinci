@@ -17,8 +17,12 @@ sub _init {
 
     my ($self) = @_;
     $self->SUPER::_init();
+
+    # to cache wrapped result
     tie my(%cache), 'Tie::Cache', 100;
     $self->{_cache} = \%cache;
+
+    $self->{load} //= 1;
 }
 
 sub _before_action {
@@ -59,8 +63,11 @@ sub _before_action {
         $module_p .= ".pm";
 
         # WISHLIST: cache negative result if someday necessary
-        eval { require $module_p };
-        return [404, "Can't find module $module"] if $@;
+        if ($self->{load}) {
+            eval { require $module_p };
+            return [404, "Can't find module $module"] if $@;
+        }
+
         $req->{-package} = $package;
         $req->{-leaf}    = $leaf;
         $req->{-module}  = $module;
@@ -377,7 +384,11 @@ Instantiate object. Known options:
 
 =over 4
 
-=item * meta_accessor => STR
+=item * meta_accessor => STR (default 'Perinci::Access::InProcess::MetaAccessor')
+
+=item * load => STR (default 1)
+
+Whether to load modules using C<require>.
 
 =back
 

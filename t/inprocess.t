@@ -7,6 +7,15 @@ use Test::More 0.96;
 
 use Perinci::Access::InProcess;
 
+package Test::Perinci::Access::InProcess;
+our %SPEC;
+$SPEC{f1} = {
+    v => 1.1,
+};
+sub f1 { [200, "OK", 2] }
+
+package main;
+
 test_request(
     name => 'unknown action',
     req => [zzz => "/"],
@@ -128,6 +137,19 @@ test_request(
     status => 500,
 );
 
+test_request(
+    name => 'opt: load=1',
+    req => [call => '/Test/Perinci/Access/InProcess/f1'],
+    status => 404,
+);
+
+test_request(
+    name => 'opt: load=0',
+    object_opts=>{load=>0},
+    req => [call => '/Test/Perinci/Access/InProcess/f1'],
+    status => 200,
+    result => 2,
+);
 
 done_testing();
 
@@ -136,9 +158,15 @@ sub test_request {
     my $req = $args{req};
     my $test_name = ($args{name} // "") . " ($req->[0] $req->[1])";
     subtest $test_name => sub {
-        state $pa;
-        unless ($pa) {
-            $pa = Perinci::Access::InProcess->new;
+        state $pa_cached;
+        my $pa;
+        if ($args{object_opts}) {
+            $pa = Perinci::Access::InProcess->new(%{$args{object_opts}});
+        } else {
+            unless ($pa_cached) {
+                $pa_cached = Perinci::Access::InProcess->new;
+            }
+            $pa = $pa_cached;
         }
         my $res = $pa->request(@$req);
         if ($args{status}) {
