@@ -403,8 +403,7 @@ C<action_ACTION> methods.
 
 =head1 Why %SPEC?
 
-The name was first chosen when during Sub::Spec era, so it stuck. You can change
-it though.
+The name was first chosen when during Sub::Spec era, so it stuck.
 
 
 =head1 SEE ALSO
