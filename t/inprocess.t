@@ -53,13 +53,13 @@ test_request(
 test_request(
     req => [info => "/"],
     status => 200,
-    result => { acts => ["info", "meta", "list"], type => "package", uri => "/", v => 1.1 },
+    result => { type => "package", uri => "/", v => 1.1 },
 );
 test_request(
     name => 'pm: uri scheme',
     req => [info => "pm:/"],
     status => 200,
-    result => { acts => ["info", "meta", "list"], type => "package", uri => "pm:/", v => 1.1 },
+    result => { type => "package", uri => "pm:/", v => 1.1 },
 );
 test_request(
     name => 'meta on / doesn\'t work yet',
@@ -123,41 +123,41 @@ test_request(
 # XXX call: invalid args
 
 test_request(
-    name => 'complete: missing arg',
-    req => [complete => "/Perinci/Examples/test_completion", {}],
+    name => 'complete_arg_val: missing arg',
+    req => [complete_arg_val => "/Perinci/Examples/test_completion", {}],
     status => 400,
 );
 test_request(
     name => 'complete: str\'s in',
-    req => [complete => "/Perinci/Examples/test_completion",
+    req => [complete_arg_val => "/Perinci/Examples/test_completion",
             {arg=>"s1", word=>"r"}],
     status => 200,
     result => ["red date", "red grape"],
 );
 test_request(
     name => 'complete: int\'s min+max',
-    req => [complete => "/Perinci/Examples/test_completion",
+    req => [complete_arg_val => "/Perinci/Examples/test_completion",
             {arg=>"i1", word=>"1"}],
     status => 200,
     result => [1, 10..19],
 );
 test_request(
     name => 'complete: int\'s min+max range too big = not completed',
-    req => [complete => "/Perinci/Examples/test_completion",
+    req => [complete_arg_val => "/Perinci/Examples/test_completion",
             {arg=>"i2", word=>"1"}],
     status => 200,
     result => [],
 );
 test_request(
     name => 'complete: sub',
-    req => [complete => "/Perinci/Examples/test_completion",
+    req => [complete_arg_val => "/Perinci/Examples/test_completion",
             {arg=>"s2", word=>"z"}],
     status => 200,
     result => ["za".."zz"],
 );
 test_request(
     name => 'complete: sub die trapped',
-    req => [complete => "/Perinci/Examples/test_completion",
+    req => [complete_arg_val => "/Perinci/Examples/test_completion",
             {arg=>"s3"}],
     status => 500,
 );

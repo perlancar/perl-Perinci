@@ -219,7 +219,7 @@ sub action_call {
     $code->(%$args);
 }
 
-sub action_complete {
+sub action_complete_arg_val {
     my ($self, $req) = @_;
     my $arg = $req->{arg} or return [400, "Please specify arg"];
     my $word = $req->{word} // "";
