@@ -191,7 +191,6 @@ sub action_list {
             push @res, {
                 #v=>1.1,
                 uri=>$uri, type=>$t,
-                #acts=> [keys %{ $self->{_typeacts}{$type} }],
             };
         } else {
             push @res, $uri;

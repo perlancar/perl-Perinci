@@ -67,24 +67,25 @@ sub _init {
     my ($self) = @_;
 
     # build a list of supported actions for each type of entity
-    my %typeacts; # key = type, val = [action, ...]
-    my @comacts;  # common actions
+    my %typeacts; # key = type, val = {action1=>meta, ...}
 
+    my @comacts;
     for my $meth (@{Class::Inspector->methods(ref $self)}) {
         next unless $meth =~ /^actionmeta_(.+)/;
         my $act = $1;
         my $meta = $self->$meth();
         for my $type (@{$meta->{applies_to}}) {
             if ($type eq '*') {
-                push @comacts, $act;
+                push @comacts, [$act, $meta];
             } else {
-                push @{$typeacts{$type}}, $act;
+                push @{$typeacts{$type}}, [$act, $meta];
             }
         }
     }
 
     for my $type (keys %typeacts) {
-        $typeacts{$type} = { map {$_=>{}} @{$typeacts{$type}}, @comacts };
+        $typeacts{$type} = { map {$_->[0] => $_->[1]}
+                                 @{$typeacts{$type}}, @comacts };
     }
 
     $self->{_typeacts} = \%typeacts;
@@ -94,21 +95,58 @@ sub _init {
 # wrong.
 sub _before_action {}
 
-sub actionmeta_info { { applies_to => ['*'], } }
+sub actionmeta_info { +{
+    applies_to => ['*'],
+    summary    => "Get general information on code entity",
+} }
+
 sub action_info {
     my ($self, $req) = @_;
     [200, "OK", {
         v    => 1.1,
         uri  => $req->{uri}->as_string,
         type => $req->{-type},
-        acts => [keys %{ $self->{_typeacts}{$req->{-type}} }],
     }];
 }
 
-sub actionmeta_list { { applies_to => ['package'], } }
-sub actionmeta_meta { { applies_to => ['*'], } }
-sub actionmeta_call { { applies_to => ['function'], } }
-sub actionmeta_complete { { applies_to => ['function'], } }
+sub actionmeta_actions { +{
+    applies_to => ['*'],
+    summary    => "List available actions for code entity",
+} }
+
+sub action_actions {
+    my ($self, $req) = @_;
+    my @res;
+    for my $k (sort keys %{ $self->{_typeacts}{$req->{-type}} }) {
+        my $v = $self->{_typeacts}{$req->{-type}}{$k};
+        if ($req->{detail}) {
+            push @res, {name=>$k, summary=>$v->{summary}};
+        } else {
+            push @res, $k;
+        }
+    }
+    [200, "OK", \@res];
+}
+
+sub actionmeta_list { +{
+    applies_to => ['package'],
+    summary    => "List code entities inside this package code entity",
+} }
+
+sub actionmeta_meta { +{
+    applies_to => ['*'],
+    summary    => "Get metadata",
+} }
+
+sub actionmeta_call { +{
+    applies_to => ['function'],
+    summary    => "Call function",
+} }
+
+sub actionmeta_complete_arg_val { +{
+    applies_to => ['function'],
+    summary    => "Complete function's argument value"
+} }
 
 1;
 # ABSTRACT: Base class for Perinci Riap clients
