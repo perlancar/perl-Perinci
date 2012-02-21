@@ -86,6 +86,21 @@ test_request(
         my ($res) = @_;
     },
 );
+
+test_request(
+    name => 'actions on package',
+    req => [actions => "/Perinci/Examples/"],
+    status => 200,
+    result => [qw/actions info list meta/],
+);
+test_request(
+    name => 'actions on function',
+    req => [actions => "/Perinci/Examples/gen_array"],
+    status => 200,
+    result => [qw/actions call complete_arg_name complete_arg_val info meta/],
+);
+# XXX actions: detail
+
 test_request(
     name => 'list action 1',
     req => [list => "/Perinci/Examples/"],
