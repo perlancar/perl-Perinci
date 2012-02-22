@@ -99,10 +99,6 @@ sub _before_action {
     0;
 }
 
-=for Pod::Coverage ^action_.+
-
-=cut
-
 sub _get_meta_accessor {
     my ($self, $req) = @_;
 
@@ -284,6 +280,10 @@ sub action_complete_arg_val {
 
 1;
 # ABSTRACT: Use Rinci access protocol (Riap) to access Perl code
+
+=for Pod::Coverage ^action_.+
+
+=cut
 
 =head1 SYNOPSIS
 
