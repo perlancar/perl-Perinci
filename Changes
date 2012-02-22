@@ -1,5 +1,12 @@
 Revision history for Perinci
 
+0.02     2012-02-22
+
+         + Implement Perinci::Access and Perinci::Access::InProcess.
+
+         + Follow Riap 1.1.7.
+
+
 0.01     2012-02-12
 
          First release, mainly for Perinci::Util. The other parts are not yet
