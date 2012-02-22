@@ -97,7 +97,7 @@ test_request(
     name => 'actions on function',
     req => [actions => "/Perinci/Examples/gen_array"],
     status => 200,
-    result => [qw/actions call complete_arg_name complete_arg_val info meta/],
+    result => [qw/actions call complete_arg_val info meta/],
 );
 # XXX actions: detail
 
