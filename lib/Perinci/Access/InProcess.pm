@@ -6,8 +6,6 @@ use warnings;
 
 use parent qw(Perinci::Access::Base);
 
-use Data::Sah;
-
 # VERSION
 
 our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
@@ -241,8 +239,6 @@ sub action_complete_arg_val {
         }
 
         my $sch = $arg_p->{schema};
-         # XXX proper normalize?
-        return unless $sch && ref($sch) eq 'ARRAY' && $sch->[1];
 
         my ($type, $cs) = @{$sch};
         if ($cs->{'in'}) {
