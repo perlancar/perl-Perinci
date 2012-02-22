@@ -358,8 +358,8 @@ The abstraction provides some benefits, still. For example, you can actually
 place metadata not in C<%SPEC> but elsewhere, like in another file or even
 database, or even by merging from several sources. By using this module, you
 don't have to change client code. This class also does some function wrapping to
-convert argument passing style or produce result envelope, so you a consistent
-interface.
+convert argument passing style or produce result envelope, so you get a
+consistent interface.
 
 =head2 Location of metadata
 
