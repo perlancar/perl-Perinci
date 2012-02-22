@@ -55,6 +55,10 @@ sub _before_action {
                 "please use valid module name"]
         if $module && $module !~ $re_mod;
 
+    $req->{-package} = $package;
+    $req->{-leaf}    = $leaf;
+    $req->{-module}  = $module;
+
     if ($module) {
         my $module_p = $module;
         $module_p =~ s!::!/!g;
@@ -74,10 +78,6 @@ sub _before_action {
                 }
             }
         }
-
-        $req->{-package} = $package;
-        $req->{-leaf}    = $leaf;
-        $req->{-module}  = $module;
     }
 
     # find out type of leaf
