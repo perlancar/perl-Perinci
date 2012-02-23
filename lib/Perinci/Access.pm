@@ -27,8 +27,9 @@ sub request {
 
     my ($sch, $subclass);
     if ($uri =~ /^\w+(::\w+)+$/) {
+        # assume X::Y is a module name
         $uri =~ s!::!/!g;
-        $uri = URI->new("pm:/$uri");
+        $uri = URI->new("pm:/$uri/");
         $sch = "pm";
     } else {
         $uri = URI->new($uri) unless blessed($uri);
