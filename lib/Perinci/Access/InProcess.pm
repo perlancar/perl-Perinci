@@ -136,6 +136,7 @@ sub _get_code_and_meta {
     return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
         unless $wres->[0] == 200;
     $code = $wres->[2]{sub};
+    $meta = $wres->[2]{meta};
 
     $self->{_cache}{$name} = [$code, $meta];
     [200, "OK", [$code, $meta]];

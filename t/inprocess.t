@@ -11,6 +11,12 @@ package Test::Perinci::Access::InProcess;
 our %SPEC;
 $SPEC{f1} = {
     v => 1.1,
+    args => {
+        a1 => {schema=>"int"},
+    },
+    result => {
+        schema => 'int*',
+    },
 };
 sub f1 { [200, "OK", 2] }
 
@@ -70,7 +76,8 @@ test_request(
     name => 'meta on package',
     req => [meta => "/Perinci/Examples/"],
     status => 200,
-    result => { summary => "This package contains various examples", v => 1.1 },
+    result => { summary => "This package contains various examples", v => 1.1,
+                result_naked=>0, args_as=>'hash' },
 );
 test_request(
     name => 'ending slash matters',
@@ -189,6 +196,23 @@ test_request(
     req => [call => '/Test/Perinci/Access/InProcess/f1'],
     status => 200,
     result => 2,
+);
+test_request(
+    name => 'schema in metadata is normalized',
+    object_opts=>{load=>0},
+    req => [meta => '/Test/Perinci/Access/InProcess/f1'],
+    status => 200,
+    result => {
+        v => 1.1,
+        args => {
+            a1 => {schema=>["int"=>{}]},
+        },
+        result => {
+            schema => ['int'=>{req=>1}],
+        },
+        result_naked=>0,
+        args_as=>'hash',
+    },
 );
 
 done_testing();
