@@ -4,7 +4,8 @@ Revision history for Perinci
 
          [BUG FIXES]
 
-         + Metadata from wrapper was not used, so schemas in metada not normalized.
+         + Metadata from wrapper was not used, so schemas in metadata not
+           normalized.
 
 
 0.02     2012-02-22
