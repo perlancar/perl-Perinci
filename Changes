@@ -1,5 +1,14 @@
 Revision history for Perinci
 
+0.05     2012-02-23
+
+         [ENHANCEMENTS]
+
+         + InProcess: Under load=1 (the default), even when loading module
+           failed, continue anyway to access the package. This makes it
+           unnecessary in most cases to create a custom object with load=0.
+
+
 0.04     2012-02-23
 
          [INCOMPATIBLE CHANGES]
