@@ -402,6 +402,17 @@ Process Riap request and return enveloped result. This method will in turn parse
 URI and other Riap request keys into C<$req> hash, and then call
 C<action_ACTION> methods.
 
+Some notes:
+
+=over 4
+
+=item * Metadata returned by the 'meta' action has normalized schemas in them
+
+Schemas in metadata (like in the C<args> and C<return> property) are normalized
+by L<Perinci::Sub::Wrapper>.
+
+=back
+
 
 =head1 FAQ
 
