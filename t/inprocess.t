@@ -185,9 +185,9 @@ test_request(
 );
 
 test_request(
-    name => 'opt: load=1',
+    name => 'opt: load=1 (will still try accessing the package anyway)',
     req => [call => '/Test/Perinci/Access/InProcess/f1'],
-    status => 404,
+    status => 200,
 );
 
 test_request(

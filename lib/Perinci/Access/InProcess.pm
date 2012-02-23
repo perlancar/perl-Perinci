@@ -69,7 +69,7 @@ sub _before_action {
             unless ($INC{$module_p}) {
                 eval { require $module_p };
                 if ($@) {
-                    return [404, "Can't find module $module"];
+                    # ignore error, we'll try accessing the package anyway
                 } else {
                     if ($self->{after_load}) {
                         eval { $self->{after_load}($self, module=>$module) };
@@ -393,7 +393,11 @@ Instantiate object. Known options:
 
 =item * load => STR (default 1)
 
-Whether to load modules using C<require>.
+Whether attempt to load modules using C<require>.
+
+=item * after_load => CODE
+
+If set, code will be executed the first time Perl module is successfully loaded.
 
 =back
 
