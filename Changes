@@ -1,5 +1,13 @@
 Revision history for Perinci
 
+0.04     2012-02-23
+
+         [INCOMPATIBLE CHANGES]
+
+         + Access: "URI" in the form of X::Y is now assumed to be a Perl package
+           name instead of qualified function name (dwimminess).
+
+
 0.03     2012-02-23
 
          [BUG FIXES]
