@@ -4,6 +4,8 @@ use 5.010;
 use strict;
 use warnings;
 
+# VERSION
+
 # static method
 sub get_meta {
     my ($class, $req) = @_;

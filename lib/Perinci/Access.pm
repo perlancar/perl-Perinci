@@ -7,6 +7,8 @@ use warnings;
 use Scalar::Util qw(blessed);
 use URI;
 
+# VERSION
+
 sub new {
     my ($class, %opts) = @_;
 
