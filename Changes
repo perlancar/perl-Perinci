@@ -1,5 +1,12 @@
 Revision history for Perinci
 
+0.03     2012-02-23
+
+         [BUG FIXES]
+
+         + Metadata from wrapper was not used, so schemas in metada not normalized.
+
+
 0.02     2012-02-22
 
          + Implement Perinci::Access and Perinci::Access::InProcess.
