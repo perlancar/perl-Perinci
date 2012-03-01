@@ -7,6 +7,19 @@ use Test::More 0.96;
 
 use Perinci::Access;
 
+subtest "_normalize_uri" => sub {
+    my $pa = Perinci::Access->new;
+    my @normalize_tests = (
+        ["Foo::Bar", "pm:/Foo/Bar/"],
+        ["/Foo", "pm:/Foo"],
+        ["pm:/Foo", "pm:/Foo"],
+        ["x:/Foo", "x:/Foo"],
+    );
+    for (@normalize_tests) {
+        is($pa->_normalize_uri($_->[0])."", $_->[1], $_->[0]);
+    }
+};
+
 test_request(
     name => 'module name in uri',
     req => [info => "Perinci::Examples"],

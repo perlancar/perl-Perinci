@@ -22,20 +22,25 @@ sub new {
     bless \%opts, $class;
 }
 
-sub request {
-    my ($self, $action, $uri, $extra) = @_;
+# convert URI string into URI object
+sub _normalize_uri {
+    my ($self, $uri) = @_;
 
-    my ($sch, $subclass);
+    return $uri if blessed($uri);
     if ($uri =~ /^\w+(::\w+)+$/) {
         # assume X::Y is a module name
         $uri =~ s!::!/!g;
-        $uri = URI->new("pm:/$uri/");
-        $sch = "pm";
+        return URI->new("pm:/$uri/");
     } else {
-        $uri = URI->new($uri) unless blessed($uri);
-        $sch = $uri->scheme;
-        $sch ||= "pm";
+        return URI->new(($uri =~ /\A[A-Za-z+-]+:/ ? "" : "pm:") . $uri);
     }
+}
+
+sub request {
+    my ($self, $action, $uri, $extra) = @_;
+
+    $uri = $self->_normalize_uri($uri);
+    my $sch = $uri->scheme;
     die "Unrecognized scheme '$sch' in URL" unless $self->{handlers}{$sch};
 
     unless ($self->{_handler_objs}{$sch}) {
