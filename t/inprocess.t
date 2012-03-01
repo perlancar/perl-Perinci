@@ -77,7 +77,7 @@ test_request(
     req => [meta => "/Perinci/Examples/"],
     status => 200,
     result => { summary => "This package contains various examples", v => 1.1,
-                result_naked=>0, args_as=>'hash' },
+                pkg_version => $Perinci::Examples::VERSION },
 );
 test_request(
     name => 'ending slash matters',
