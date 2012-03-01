@@ -1,5 +1,18 @@
 Revision history for Perinci
 
+0.06     2012-03-01
+
+         [ENHANCEMENTS]
+
+         + Access: Add _normalize_uri()
+
+         + package: Set 'pkg_version' property value from $VERSION
+
+         [FIXES]
+
+         + Don't wrap non-functions
+
+
 0.05     2012-02-23
 
          [ENHANCEMENTS]
