@@ -80,8 +80,9 @@ sub _before_action {
         }
     }
 
-    # find out type of leaf
+    # find out type of leaf and other information
     my $type;
+    my $entity_version;
     if ($leaf) {
         if ($leaf =~ /^[%\@\$]/) {
             # XXX check existence of variable
@@ -93,8 +94,10 @@ sub _before_action {
         }
     } else {
         $type = 'package';
+        $entity_version = ${$module . '::VERSION'};
     }
     $req->{-type} = $type;
+    $req->{-entity_version} = $entity_version;
 
     0;
 }

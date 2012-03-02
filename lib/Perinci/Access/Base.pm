@@ -102,11 +102,14 @@ sub actionmeta_info { +{
 
 sub action_info {
     my ($self, $req) = @_;
-    [200, "OK", {
+    my $res = {
         v    => 1.1,
         uri  => $req->{uri}->as_string,
         type => $req->{-type},
-    }];
+    };
+    $res->{entity_version} = $req->{-entity_version}
+        if defined $req->{-entity_version};
+    [200, "OK", $res];
 }
 
 sub actionmeta_actions { +{
