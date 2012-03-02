@@ -100,7 +100,7 @@ sub _before_action {
     $req->{-type} = $type;
     $req->{-entity_version} = $entity_version;
 
-    $log->tracef("req=%s", $req);
+    #$log->tracef("req=%s", $req);
 
     0;
 }
