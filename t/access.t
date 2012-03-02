@@ -6,11 +6,11 @@ use warnings;
 use Test::More 0.96;
 
 use Perinci::Access;
+use Perinci::Examples;
 
 subtest "_normalize_uri" => sub {
     my $pa = Perinci::Access->new;
     my @normalize_tests = (
-        ["Foo::Bar", "pm:/Foo/Bar/"],
         ["/Foo", "pm:/Foo"],
         ["pm:/Foo", "pm:/Foo"],
         ["x:/Foo", "x:/Foo"],
@@ -22,9 +22,10 @@ subtest "_normalize_uri" => sub {
 
 test_request(
     name => 'module name in uri',
-    req => [info => "Perinci::Examples"],
+    req => [info => "/Perinci/Examples/"],
     status => 200,
-    result => { type => "package", uri => "pm:/Perinci/Examples/", v => 1.1 },
+    result => { type => "package", uri => "pm:/Perinci/Examples/", v => 1.1,
+                entity_version => $Perinci::Examples::VERSION },
 );
 
 done_testing;
