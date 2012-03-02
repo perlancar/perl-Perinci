@@ -1,5 +1,21 @@
 Revision history for Perinci
 
+0.07     2012-03-02
+
+         [REMOVED FEATURES, INCOMPATIBLE]
+
+         + InProcess: Drop support for URI syntax "Mod::SubMod". Now a die
+           message is shown instead. This is to avoid possible confusion with
+           user assuming that "Mod::SubMod::function" syntax is also supported
+           (it's not).
+
+         [ENHANCEMENTS]
+
+         + InProcess: Return 'entity_version' in 'info' action, currently only
+           for package entities, to make it easier to get Perl module version.
+           (Note: This is an extension of Rinci standard.)
+
+
 0.06     2012-03-01
 
          [ENHANCEMENTS]
