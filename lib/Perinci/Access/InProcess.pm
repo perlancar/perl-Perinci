@@ -3,6 +3,7 @@ package Perinci::Access::InProcess;
 use 5.010;
 use strict;
 use warnings;
+use Log::Any '$log';
 
 use parent qw(Perinci::Access::Base);
 
@@ -98,6 +99,8 @@ sub _before_action {
     }
     $req->{-type} = $type;
     $req->{-entity_version} = $entity_version;
+
+    $log->tracef("req=%s", $req);
 
     0;
 }

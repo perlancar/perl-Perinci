@@ -29,8 +29,15 @@ sub _normalize_uri {
     return $uri if blessed($uri);
     if ($uri =~ /^\w+(::\w+)+$/) {
         # assume X::Y is a module name
+        my $orig = $uri;
         $uri =~ s!::!/!g;
-        return URI->new("pm:/$uri/");
+        $uri = "/$uri/";
+
+        #return URI->new("pm:$uri");
+
+        # to avoid mistakes, die instead
+        die "You specified module name '$orig' as Riap URI, ".
+            "please use '$uri' instead";
     } else {
         return URI->new(($uri =~ /\A[A-Za-z+-]+:/ ? "" : "pm:") . $uri);
     }
@@ -89,7 +96,6 @@ sub request {
 This module provides a convenient wrapper to select appropriate Riap client
 (Perinci::Access::*) objects based on URI scheme (or lack thereof).
 
- Foo::Bar    -> InProcess
  /Foo/Bar/   -> InProcess
  pm:/Foo/Bar -> InProcess
  http://...  -> HTTP::Client
