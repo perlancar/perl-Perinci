@@ -3,6 +3,7 @@ package Perinci::Access;
 use 5.010;
 use strict;
 use warnings;
+use Log::Any '$log';
 
 use Scalar::Util qw(blessed);
 use URI;
