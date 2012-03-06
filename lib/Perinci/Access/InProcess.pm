@@ -7,6 +7,8 @@ use Log::Any '$log';
 
 use parent qw(Perinci::Access::Base);
 
+use SHARYANTO::Package::Util qw(package_exists);
+
 # VERSION
 
 our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
@@ -69,8 +71,22 @@ sub _before_action {
         if ($self->{load}) {
             unless ($INC{$module_p}) {
                 eval { require $module_p };
-                if ($@) {
-                    # ignore error, we'll try accessing the package anyway
+                my $req_err = $@;
+                if ($req_err) {
+                    if (!package_exists($module)) {
+                        return [500, "Can't load module $module (probably ".
+                                    "mistyped or missing module): $req_err"];
+                    } elsif ($req_err !~ m!Can't locate!) {
+                        return [500, "Can't load module $module (probably ".
+                                    "compile error): $req_err"];
+                    }
+                    # require error of "Can't locate ..." can be ignored. it
+                    # might mean package is already defined by other code. we'll
+                    # try and access it anyway.
+                } elsif (!package_exists($module)) {
+                    # shouldn't happen
+                    return [500, "Module loaded OK, but no $module package ".
+                                "found, something's wrong"];
                 } else {
                     if ($self->{after_load}) {
                         eval { $self->{after_load}($self, module=>$module) };
