@@ -9,6 +9,13 @@ use Perinci::Access::InProcess;
 
 package Test::Perinci::Access::InProcess;
 our %SPEC;
+
+$SPEC{':package'} = {v=>1.1, summary=>"A package"};
+
+$SPEC{'$v1'} = {v=>1.1, summary=>"A variable"};
+our $VERSION = 1.2;
+our $v1 = 123;
+
 $SPEC{f1} = {
     v => 1.1,
     args => {
@@ -19,6 +26,9 @@ $SPEC{f1} = {
     },
 };
 sub f1 { [200, "OK", 2] }
+
+$SPEC{f2} = {v=>1.1};
+sub f2 { [200, "OK", 3] }
 
 package main;
 
@@ -74,10 +84,11 @@ test_request(
 );
 test_request(
     name => 'meta on package',
-    req => [meta => "/Perinci/Examples/"],
+    req => [meta => "/Test/Perinci/Access/InProcess/"],
     status => 200,
-    result => { summary => "This package contains various examples", v => 1.1,
-                pkg_version => $Perinci::Examples::VERSION },
+    result => { summary => "A package",
+                v => 1.1,
+                pkg_version => $Test::Perinci::Access::InProcess::VERSION },
 );
 test_request(
     name => 'ending slash matters',
@@ -98,13 +109,19 @@ test_request(
     name => 'actions on package',
     req => [actions => "/Perinci/Examples/"],
     status => 200,
-    result => [qw/actions info list meta/],
+    result => [qw/actions child_metas info list meta/],
 );
 test_request(
     name => 'actions on function',
     req => [actions => "/Perinci/Examples/gen_array"],
     status => 200,
     result => [qw/actions call complete_arg_val info meta/],
+);
+test_request(
+    name => 'actions on variable',
+    req => [actions => "/Perinci/Examples/\$Var1"],
+    status => 200,
+    result => [qw/actions get info meta/],
 );
 # XXX actions: detail
 
@@ -215,6 +232,35 @@ test_request(
     },
 );
 
+test_request(
+    name => 'child_metas action',
+    object_opts=>{load=>0},
+    req => [child_metas => '/Test/Perinci/Access/InProcess/'],
+    status => 200,
+    result => {
+        'pm:/Test/Perinci/Access/InProcess/$v1' =>
+            {
+                v=>1.1,
+                summary=>"A variable",
+            },
+        'pm:/Test/Perinci/Access/InProcess/f1' =>
+            {
+                v=>1.1,
+                args => {
+                    a1 => {schema=>["int"=>{}]},
+                },
+                result => {
+                    schema => ['int'=>{req=>1}],
+                },
+                args_as => 'hash', result_naked => 0,
+            },
+        'pm:/Test/Perinci/Access/InProcess/f2' =>
+            {
+                v=>1.1,
+                args_as => 'hash', result_naked => 0,
+            },
+    },
+);
 done_testing();
 
 sub test_request {

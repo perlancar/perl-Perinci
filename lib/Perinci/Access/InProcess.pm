@@ -306,6 +306,42 @@ sub action_complete_arg_val {
     [200, "OK", [grep /^\Q$word\E/, @$words]];
 }
 
+sub action_child_metas {
+    my ($self, $req) = @_;
+
+    my $res = $self->action_list($req);
+    return $res unless $res->[0] == 200;
+    my $ents = $res->[2];
+
+    my %res;
+    for my $ent (@$ents) {
+        $res = $self->request(meta => $ent);
+        # ignore failed request
+        next unless $res->[0] == 200;
+        $res{$ent} = $res->[2];
+    }
+    [200, "OK", \%res];
+}
+
+sub action_get {
+    no strict 'refs';
+
+    my ($self, $req) = @_;
+    local $req->{-leaf} = $req->{-leaf};
+
+    # extract prefix
+    $req->{-leaf} =~ s/^([%\@\$])//
+        or return [500, "BUG: Unknown variable prefix"];
+    my $prefix = $1;
+    my $name = $req->{-module} . "::" . $req->{-leaf};
+    my $res =
+        $prefix eq '$' ? ${$name} :
+            $prefix eq '@' ? \@{$name} :
+                $prefix eq '%' ? \%{$name} :
+                    undef;
+    [200, "OK", $res];
+}
+
 1;
 # ABSTRACT: Use Rinci access protocol (Riap) to access Perl code
 

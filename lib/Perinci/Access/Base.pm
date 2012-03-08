@@ -67,7 +67,11 @@ sub _init {
     my ($self) = @_;
 
     # build a list of supported actions for each type of entity
-    my %typeacts; # key = type, val = {action1=>meta, ...}
+    my %typeacts = (
+        package  => [],
+        function => [],
+        variable => [],
+    ); # key = type, val = [[ACTION, META], ...]
 
     my @comacts;
     for my $meth (@{Class::Inspector->methods(ref $self)}) {
@@ -149,6 +153,16 @@ sub actionmeta_call { +{
 sub actionmeta_complete_arg_val { +{
     applies_to => ['function'],
     summary    => "Complete function's argument value"
+} }
+
+sub actionmeta_child_metas { +{
+    applies_to => ['package'],
+    summary    => "Get metadata of all child entities",
+} }
+
+sub actionmeta_get { +{
+    applies_to => ['variable'],
+    summary    => "Get value of variable",
 } }
 
 1;
