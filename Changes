@@ -1,5 +1,15 @@
 Revision history for Perinci
 
+0.08     2012-03-08
+
+         [ENHANCEMENTS]
+
+         + InProcess: implement actions 'child_metas' and 'get' (Rinci 1.1.8 &
+           1.1.9 spec).
+
+         + Better error message when module is not found or has compile errors.
+
+
 0.07     2012-03-02
 
          [REMOVED FEATURES, INCOMPATIBLE]
