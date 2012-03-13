@@ -163,8 +163,12 @@ sub _get_code_and_meta {
         $meta = $wres->[2]{meta};
 
         $self->{_cache}{$name} = [$code, $meta];
-    } elsif ($req->{-type} eq 'package') {
-        $meta->{pkg_version} //= ${ $req->{-module} . "::VERSION" };
+    }
+    unless (defined $meta->{entity_version}) {
+        my $ver = ${ $req->{-module} . "::VERSION" };
+        if (defined $ver) {
+            $meta->{entity_version} = $ver;
+        }
     }
     [200, "OK", [$code, $meta]];
 }

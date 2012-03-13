@@ -88,7 +88,7 @@ test_request(
     status => 200,
     result => { summary => "A package",
                 v => 1.1,
-                pkg_version => $Test::Perinci::Access::InProcess::VERSION },
+                entity_version => $Test::Perinci::Access::InProcess::VERSION },
 );
 test_request(
     name => 'ending slash matters',
@@ -229,6 +229,7 @@ test_request(
         },
         result_naked=>0,
         args_as=>'hash',
+        entity_version=>1.2,
     },
 );
 
@@ -242,6 +243,7 @@ test_request(
             {
                 v=>1.1,
                 summary=>"A variable",
+                entity_version=>1.2,
             },
         'pm:/Test/Perinci/Access/InProcess/f1' =>
             {
@@ -253,11 +255,13 @@ test_request(
                     schema => ['int'=>{req=>1}],
                 },
                 args_as => 'hash', result_naked => 0,
+                entity_version=>1.2,
             },
         'pm:/Test/Perinci/Access/InProcess/f2' =>
             {
                 v=>1.1,
                 args_as => 'hash', result_naked => 0,
+                entity_version=>1.2,
             },
     },
 );
