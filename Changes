@@ -1,5 +1,13 @@
 Revision history for Perinci
 
+0.09     2012-03-13
+
+         [REMOVED FEATURES, INCOMPATIBLE, ENHANCEMENTS]
+
+         + Update to Rinci 1.1.11 (implement 'entity_version' and remove
+         'pkg_version').
+
+
 0.08     2012-03-08
 
          [ENHANCEMENTS]
