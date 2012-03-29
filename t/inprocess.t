@@ -18,12 +18,14 @@ our $v1 = 123;
 
 $SPEC{f1} = {
     v => 1.1,
+    summary => "An example function",
     args => {
         a1 => {schema=>"int"},
     },
     result => {
         schema => 'int*',
     },
+    _internal1=>1,
 };
 sub f1 { [200, "OK", 2] }
 
@@ -221,6 +223,7 @@ test_request(
     status => 200,
     result => {
         v => 1.1,
+        summary => "An example function",
         args => {
             a1 => {schema=>["int"=>{}]},
         },
@@ -248,6 +251,7 @@ test_request(
         'pm:/Test/Perinci/Access/InProcess/f1' =>
             {
                 v=>1.1,
+                summary => "An example function",
                 args => {
                     a1 => {schema=>["int"=>{}]},
                 },
@@ -265,6 +269,36 @@ test_request(
             },
     },
 );
+
+test_request(
+    name => 'opt: extra_wrapper_args',
+    object_opts=>{extra_wrapper_args=>{remove_internal_properties=>0}},
+    req => [meta => '/Test/Perinci/Access/InProcess/f1'],
+    status => 200,
+    posttest => sub {
+        my ($res) = @_;
+        my $meta = $res->[2];
+        ok($meta->{_internal1}, "remove_internal_properties passed to wrapper")
+            or diag explain $res;
+    },
+);
+test_request(
+    name => 'opt: extra_wrapper_convert',
+    object_opts=>{extra_wrapper_convert=>{default_lang=>"id_ID"}},
+    req => [meta => '/Test/Perinci/Access/InProcess/f1'],
+    status => 200,
+    posttest => sub {
+        my ($res) = @_;
+        my $meta = $res->[2];
+        ok($meta->{"summary.alt.lang.en_US"},
+           "default_lang convert passed to wrapper (1)")
+            or diag explain $res;
+        ok(!$meta->{summary},
+           "default_lang convert passed to wrapper (2)")
+            or diag explain $res;
+    },
+);
+
 done_testing();
 
 sub test_request {

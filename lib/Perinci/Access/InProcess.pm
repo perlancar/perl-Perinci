@@ -23,7 +23,11 @@ sub _init {
     tie my(%cache), 'Tie::Cache', 100;
     $self->{_cache} = \%cache;
 
-    $self->{load} //= 1;
+    # attributes
+    $self->{meta_accessor} //= "Perinci::Access::InProcess::MetaAccessor";
+    $self->{load}          //= 1;
+    $self->{extra_wrapper_args}    //= {};
+    $self->{extra_wrapper_convert} //= {};
 }
 
 sub _before_action {
@@ -126,8 +130,7 @@ sub _get_meta_accessor {
 
     no strict 'refs';
     my $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
-        $self->{meta_accessor} //
-            "Perinci::Access::InProcess::MetaAccessor";
+        $self->{meta_accessor};
     my $ma_p = $ma;
     $ma_p =~ s!::!/!g;
     $ma_p .= ".pm";
@@ -156,7 +159,11 @@ sub _get_code_and_meta {
         $code = \&{$name};
         my $wres = Perinci::Sub::Wrapper::wrap_sub(
             sub=>$code, meta=>$meta,
-            convert=>{args_as=>'hash', result_naked=>0});
+            %{$self->{extra_wrapper_args}},
+            convert=>{
+                args_as=>'hash', result_naked=>0,
+                %{$self->{extra_wrapper_convert}},
+            });
         return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
             unless $wres->[0] == 200;
         $code = $wres->[2]{sub};
@@ -450,9 +457,9 @@ you can put in C<%SPEC> at the end.
 
 =head1 METHODS
 
-=head2 PKG->new(%opts) => OBJ
+=head2 PKG->new(%attrs) => OBJ
 
-Instantiate object. Known options:
+Instantiate object. Known attributes:
 
 =over 4
 
@@ -465,6 +472,21 @@ Whether attempt to load modules using C<require>.
 =item * after_load => CODE
 
 If set, code will be executed the first time Perl module is successfully loaded.
+
+=item * extra_wrapper_args => HASH
+
+If set, will be passed to L<Perinci::Sub::Wrapper>'s wrap_sub() when wrapping
+subroutines.
+
+Some applications of this include: adding C<timeout> or C<result_postfilter>
+properties to functions.
+
+=item * extra_wrapper_convert => HASH
+
+If set, will be passed to L<Perinci::Sub::Wrapper> wrap_sub()'s C<convert>
+argument when wrapping subroutines.
+
+Some applications of this include: changing C<default_lang> of metadata.
 
 =back
 
