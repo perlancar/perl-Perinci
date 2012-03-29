@@ -1,5 +1,13 @@
 Revision history for Perinci
 
+0.10     2012-03-29
+
+         [ENHANCEMENTS]
+
+         + Access::InProcess: Add attributes extra_wrapper_args &
+         extra_wrapper_convert.
+
+
 0.09     2012-03-13
 
          [REMOVED FEATURES, INCOMPATIBLE, ENHANCEMENTS]
