@@ -34,6 +34,7 @@ my $format_text = sub {
 our %Formats = (
     yaml          => 'YAML',
     json          => 'CompactJSON',
+    'json-pretty' => 'JSON',
     text          => $format_text,
     'text-simple' => $format_text,
     'text-pretty' => $format_text,
