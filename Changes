@@ -2,8 +2,11 @@ Revision history for Perinci
 
 0.12     2012-03-30
 
-         Add MIME type information to %Perinci::Result::Format::Formats (for
-         Perinci-Access-HTTP-Server).
+         - Add MIME type information to %Perinci::Result::Format::Formats (for
+           Perinci-Access-HTTP-Server).
+
+         - Add dependencies to supported modules (Data::Format::Pretty::*
+           modules).
 
 
 0.11     2012-03-30
