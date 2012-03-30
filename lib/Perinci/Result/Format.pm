@@ -66,6 +66,32 @@ This module format enveloped result to YAML, JSON, etc. It uses
 L<Data::Format::Pretty> for the backend. It is used by other Perinci modules
 like L<Perinci::CmdLine> and L<Perinci::Access::HTTP::Server>.
 
+The default supported formats are:
+
+=over 4
+
+=item * json
+
+Using Data::Format::Pretty::YAML.
+
+=item * text-simple
+
+Using Data::Format::Pretty::SimpleText.
+
+=item * text-pretty
+
+Using Data::Format::Pretty::Text.
+
+=item * text
+
+Using Data::Format::Pretty::Console.
+
+=item * yaml
+
+Using Data::Format::Pretty::YAML.
+
+=back
+
 
 =head1 VARIABLES
 
