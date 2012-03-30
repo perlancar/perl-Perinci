@@ -32,12 +32,12 @@ my $format_text = sub {
 };
 
 our %Formats = (
-    yaml          => 'YAML',
-    json          => 'CompactJSON',
-    'json-pretty' => 'JSON',
-    text          => $format_text,
-    'text-simple' => $format_text,
-    'text-pretty' => $format_text,
+    yaml          => ['YAML', 'text/yaml'],
+    json          => ['CompactJSON', 'application/json'],
+    'json-pretty' => ['JSON', 'application/json'],
+    text          => [$format_text, 'text/plain'],
+    'text-simple' => [$format_text, 'text/plain'],
+    'text-pretty' => [$format_text, 'text/plain'],
 );
 
 sub format {
@@ -47,11 +47,11 @@ sub format {
 
     my $formatter = $Formats{$format} or return undef;
 
-    if (ref($formatter) eq 'CODE') {
-        return $formatter->($format, $res);
+    if (ref($formatter->[0]) eq 'CODE') {
+        return $formatter->[0]->($format, $res);
     } else {
         return Data::Format::Pretty::format_pretty(
-            $res, {module=>$formatter});
+            $res, {module=>$formatter->[0]});
     }
 }
 
@@ -99,7 +99,7 @@ Using Data::Format::Pretty::YAML.
 =head1 %Perinci::Result::Format::Formats
 
 Contains a mapping between format names and Data::Format::Pretty::* module
-names.
+names + MIME type.
 
 
 =head1 FUNCTIONS
@@ -121,7 +121,7 @@ Then, add your format to %Perinci::Result::Format::Formats hash:
  use Perinci::Result::Format;
 
  # this means format named 'xml' will be handled by Data::Format::Pretty::XML
- $Perinci::Result::Format::Formats{xml} = 'XML';
+ $Perinci::Result::Format::Formats{xml} = ['XML', 'text/xml'];
 
 
 =head1 SEE ALSO

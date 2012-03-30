@@ -26,5 +26,9 @@ is(Perinci::Result::Format::format([200, "OK", ""], 'json'),
    '[200,"OK",""]',
    "json");
 
+is($Perinci::Result::Format::Formats{json}[1],
+   'application/json',
+   'mime type 1');
+
 done_testing();
 
