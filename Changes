@@ -1,5 +1,10 @@
 Revision history for Perinci
 
+0.13     2012-03-31
+
+         No functional changes. Add missing dependency [CT].
+
+
 0.12     2012-03-30
 
          - Add MIME type information to %Perinci::Result::Format::Formats (for
