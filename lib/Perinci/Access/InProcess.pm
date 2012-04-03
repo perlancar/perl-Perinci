@@ -378,7 +378,7 @@ sub action_get {
          {args=>{a=>2, b=>3}, result=>6},
      ],
  };
- sub mult {
+ sub mult2 {
      my %args = @_;
      [200, "OK", $args{a} * $args{b}];
  }
@@ -410,7 +410,7 @@ sub action_get {
 
  # list all functions in package
  my $res = $pa->request(list => '/My/Module/', {type=>'function'});
- # -> [200, "OK", ['/My/Module/mult2', '/My/Module/mult2']]
+ # -> [200, "OK", ['/My/Module/mult2', '/My/Module/multn']]
 
  # call function
  my $res = $pa->request(call => '/My/Module/mult2', {args=>{a=>2, b=>3}});
