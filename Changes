@@ -1,5 +1,16 @@
 Revision history for Perinci
 
+0.14     2012-03-31
+
+         Incompatible changes due to spec change in Riap 1.1.10.
+
+         [INCOMPATIBLE CHANGES]
+
+         - pm:/ scheme becomes pl:/
+
+         - Add supported schemes riap:// (perl only).
+
+
 0.13     2012-03-31
 
          No functional changes. Add missing dependency [CT].
