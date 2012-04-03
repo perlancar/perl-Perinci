@@ -22,7 +22,7 @@ our $re_action  = $re_var;
 
 sub request {
     my ($self, $action, $uri, $extra) = @_;
-    my $req = {};
+    my $req = {uri=>$uri};
 
     # check args
 
@@ -44,21 +44,25 @@ sub request {
         unless $action =~ $re_action;
     $req->{action} = $action;
 
-    my $meth = "action_$action";
-    return [502, "Action '$action' not implemented"] unless
-        $self->can($meth);
+    if ($self->can("remote_request")) {
+        return $self->remote_request($req);
+    } else {
+        my $meth = "action_$action";
+        return [502, "Action '$action' not implemented"] unless
+            $self->can($meth);
 
-    return [400, "Please specify URI"] unless $uri;
-    $uri = URI->new($uri) unless blessed($uri);
-    $req->{uri} = $uri;
+        return [400, "Please specify URI"] unless $uri;
+        $uri = URI->new($uri) unless blessed($uri);
+        $req->{uri} = $uri;
 
-    my $res = $self->_before_action($req);
-    return $res if $res;
+        my $res = $self->_before_action($req);
+        return $res if $res;
 
-    return [502, "Action '$action' not implemented for '$req->{-type}' entity"]
-        unless $self->{_typeacts}{ $req->{-type} }{ $action };
-
-    $res = $self->$meth($req);
+        return [502, "Action '$action' not implemented for ".
+                    "'$req->{-type}' entity"]
+            unless $self->{_typeacts}{ $req->{-type} }{ $action };
+        return $self->$meth($req);
+    }
 }
 
 sub _init {
