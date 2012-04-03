@@ -13,13 +13,16 @@ use URI;
 sub new {
     my ($class, %opts) = @_;
 
-    $opts{handlers}             //= {};
-    $opts{handlers}{pm}         //= 'Perinci::Access::InProcess';
-    $opts{handlers}{http}       //= 'Perinci::Access::HTTP::Client';
-    $opts{handlers}{https}      //= 'Perinci::Access::HTTP::Client';
-    $opts{handlers}{'riap+tcp'} //= 'Perinci::Access::TCP::Client';
+    $opts{handlers}               //= {};
+    $opts{handlers}{riap}         //= 'Perinci::Access::InProcess';
+    $opts{handlers}{pl}           //= 'Perinci::Access::InProcess';
+    $opts{handlers}{http}         //= 'Perinci::Access::HTTP::Client';
+    $opts{handlers}{https}        //= 'Perinci::Access::HTTP::Client';
+    $opts{handlers}{'riap+http'}  //= 'Perinci::Access::HTTP::Client';
+    $opts{handlers}{'riap+https'} //= 'Perinci::Access::HTTP::Client';
+    $opts{handlers}{'riap+tcp'}   //= 'Perinci::Access::TCP::Client';
 
-    $opts{_handler_objs}        //= {};
+    $opts{_handler_objs}          //= {};
     bless \%opts, $class;
 }
 
@@ -34,13 +37,13 @@ sub _normalize_uri {
         $uri =~ s!::!/!g;
         $uri = "/$uri/";
 
-        #return URI->new("pm:$uri");
+        #return URI->new("pl:$uri");
 
         # to avoid mistakes, die instead
         die "You specified module name '$orig' as Riap URI, ".
             "please use '$uri' instead";
     } else {
-        return URI->new(($uri =~ /\A[A-Za-z+-]+:/ ? "" : "pm:") . $uri);
+        return URI->new(($uri =~ /\A[A-Za-z+-]+:/ ? "" : "pl:") . $uri);
     }
 }
 
@@ -51,13 +54,25 @@ sub request {
     my $sch = $uri->scheme;
     die "Unrecognized scheme '$sch' in URL" unless $self->{handlers}{$sch};
 
+    # convert riap:// to pl:/ as InProcess only accepts the later
+    if ($sch eq 'riap') {
+        print $uri->path;
+        my ($host) = $uri =~ m!//([^/]+)!; # host() not supported, URI::_foreign
+        if ($host =~ /^(?:perl|pl)$/) {
+            $uri = URI->new("pl:" . $uri->path);
+        } else {
+            die "Unsupported host '$host' in riap: scheme, ".
+                "only 'perl' is supported";
+        }
+    }
+
     unless ($self->{_handler_objs}{$sch}) {
         if (blessed($self->{handlers}{$sch})) {
             $self->{_handler_objs}{$sch} = $self->{handlers}{$sch};
         } else {
-            my $mod_pm = $self->{handlers}{$sch};
-            $mod_pm =~ s!::!/!g;
-            require "$mod_pm.pm";
+            my $modp = $self->{handlers}{$sch};
+            $modp =~ s!::!/!g; $modp .= ".pm";
+            require $modp;
             $self->{_handler_objs}{$sch} = $self->{handlers}{$sch}->new;
         }
     }
@@ -76,11 +91,10 @@ sub request {
  my $res;
 
  # use Perinci::Access::InProcess
- $res = $pa->request(call => "pm:/Mod/SubMod/func");
+ $res = $pa->request(call => "pl:/Mod/SubMod/func");
 
  # ditto
  $res = $pa->request(call => "/Mod/SubMod/func");
- $res = $pa->request(call => "Mod::SubMod::func");
 
  # use Perinci::Access::HTTP::Client
  $res = $pa->request(info => "http://example.com/Sub/ModSub/func");
@@ -97,13 +111,17 @@ sub request {
 This module provides a convenient wrapper to select appropriate Riap client
 (Perinci::Access::*) objects based on URI scheme (or lack thereof).
 
- /Foo/Bar/   -> InProcess
- pm:/Foo/Bar -> InProcess
- http://...  -> HTTP::Client
- https://... -> HTTP::Client
- riap+tcp:// -> TCP::Client
+ riap://perl/Foo/Bar/  -> InProcess
+ /Foo/Bar/             -> InProcess
+ pl:/Foo/Bar           -> InProcess
+ http://...            -> HTTP::Client
+ https://...           -> HTTP::Client
+ riap+http://...       -> HTTP::Client
+ riap+https://...      -> HTTP::Client
+ riap+tcp://...        -> TCP::Client
 
-You can customize or add supported schemes by providing the .
+You can customize or add supported schemes by providing class name or object to
+the B<handlers> attribute (see its documentation for more details).
 
 
 =head1 METHODS
@@ -120,10 +138,13 @@ A mapping of scheme names and class names or objects. If values are class names,
 they will be require'd and instantiated. The default is:
 
  {
-   pm         => 'Perinci::Access::InProcess',
-   http       => 'Perinci::Access::HTTP::Client',
-   https      => 'Perinci::Access::HTTP::Client',
-   'riap+tcp' => 'Perinci::Access::TCP::Client',
+   riap         => 'Perinci::Access::InProcess',
+   pl           => 'Perinci::Access::InProcess',
+   http         => 'Perinci::Access::HTTP::Client',
+   https        => 'Perinci::Access::HTTP::Client',
+   'riap+http'  => 'Perinci::Access::HTTP::Client',
+   'riap+https' => 'Perinci::Access::HTTP::Client',
+   'riap+tcp'   => 'Perinci::Access::TCP::Client',
  }
 
 Objects can be given instead of class names. This is used if you need to pass

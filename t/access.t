@@ -11,22 +11,14 @@ use Perinci::Examples;
 subtest "_normalize_uri" => sub {
     my $pa = Perinci::Access->new;
     my @normalize_tests = (
-        ["/Foo", "pm:/Foo"],
-        ["pm:/Foo", "pm:/Foo"],
+        ["/Foo", "pl:/Foo"],
+        ["pl:/Foo", "pl:/Foo"],
         ["x:/Foo", "x:/Foo"],
     );
     for (@normalize_tests) {
         is($pa->_normalize_uri($_->[0])."", $_->[1], $_->[0]);
     }
 };
-
-test_request(
-    name => 'module name in uri',
-    req => [info => "/Perinci/Examples/"],
-    status => 200,
-    result => { type => "package", uri => "pm:/Perinci/Examples/", v => 1.1,
-                entity_version => $Perinci::Examples::VERSION },
-);
 
 done_testing;
 

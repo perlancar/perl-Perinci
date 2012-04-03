@@ -200,7 +200,7 @@ sub action_list {
         $p0 =~ s!/+$!!;
         for my $m (sort keys %$lres) {
             $m =~ s!.+::!!;
-            my $uri = join("", "pm:", $p0, "/", $m, "/");
+            my $uri = join("", "pl:", $p0, "/", $m, "/");
             if ($detail) {
                 push @res, {uri=>$uri, type=>"package"};
             } else {
@@ -214,7 +214,7 @@ sub action_list {
     return $res if $res->[0] != 200;
     my $ma = $res->[2];
     my $spec = $ma->get_all_meta($req);
-    my $base = "pm:/$req->{-module}"; $base =~ s!::!/!g;
+    my $base = "pl:/$req->{-module}"; $base =~ s!::!/!g;
     for (sort keys %$spec) {
         next if /^:/;
         my $uri = join("", $base, "/", $_);

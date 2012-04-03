@@ -74,14 +74,14 @@ test_request(
     result => { type => "package", uri => "/", v => 1.1 },
 );
 test_request(
-    name => 'pm: uri scheme',
-    req => [info => "pm:/"],
+    name => 'pl: uri scheme',
+    req => [info => "pl:/"],
     status => 200,
-    result => { type => "package", uri => "pm:/", v => 1.1 },
+    result => { type => "package", uri => "pl:/", v => 1.1 },
 );
 test_request(
     name => 'meta on / doesn\'t work yet',
-    req => [meta => "pm:/"],
+    req => [meta => "pl:/"],
     status => 404,
 );
 test_request(
@@ -242,13 +242,13 @@ test_request(
     req => [child_metas => '/Test/Perinci/Access/InProcess/'],
     status => 200,
     result => {
-        'pm:/Test/Perinci/Access/InProcess/$v1' =>
+        'pl:/Test/Perinci/Access/InProcess/$v1' =>
             {
                 v=>1.1,
                 summary=>"A variable",
                 entity_version=>1.2,
             },
-        'pm:/Test/Perinci/Access/InProcess/f1' =>
+        'pl:/Test/Perinci/Access/InProcess/f1' =>
             {
                 v=>1.1,
                 summary => "An example function",
@@ -261,7 +261,7 @@ test_request(
                 args_as => 'hash', result_naked => 0,
                 entity_version=>1.2,
             },
-        'pm:/Test/Perinci/Access/InProcess/f2' =>
+        'pl:/Test/Perinci/Access/InProcess/f2' =>
             {
                 v=>1.1,
                 args_as => 'hash', result_naked => 0,
