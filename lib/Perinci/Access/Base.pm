@@ -4,9 +4,6 @@ use 5.010;
 use strict;
 use warnings;
 
-use Scalar::Util qw(blessed);
-use URI;
-
 # VERSION
 
 sub new {
@@ -20,49 +17,31 @@ our $re_var     = qr/\A[A-Za-z_][A-Za-z_0-9]*\z/;
 our $re_req_key = $re_var;
 our $re_action  = $re_var;
 
-sub request {
-    my ($self, $action, $uri, $extra) = @_;
-    my $req = {uri=>$uri};
+sub check_request {
+    my ($self, $req) = @_;
 
     # check args
 
-    $extra //= {};
-    return [400, "Invalid extra arguments: must be hashref"]
-        unless ref($extra) eq 'HASH';
-    for my $k (keys %$extra) {
+    # XXX schema
+    #$req //= {};
+    #return [400, "Invalid req: must be hashref"]
+    #    unless ref($req) eq 'HASH';
+    for my $k (keys %$req) {
         return [400, "Invalid request key '$k', ".
                     "please only use letters/numbers"]
             unless $k =~ $re_req_key;
-        $req->{$k} = $extra->{$k};
     }
 
     $req->{v} //= 1.1;
     return [500, "Protocol version not supported"] if $req->{v} ne '1.1';
 
+    my $action = $req->{action};
     return [400, "Please specify action"] unless $action;
-    return [400, "Invalid syntax in action, please only use letters/numbers"]
+    return [400, "Invalid action, please only use letters/numbers"]
         unless $action =~ $re_action;
-    $req->{action} = $action;
 
-    if ($self->can("remote_request")) {
-        return $self->remote_request($req);
-    } else {
-        my $meth = "action_$action";
-        return [502, "Action '$action' not implemented"] unless
-            $self->can($meth);
-
-        return [400, "Please specify URI"] unless $uri;
-        $uri = URI->new($uri) unless blessed($uri);
-        $req->{uri} = $uri;
-
-        my $res = $self->_before_action($req);
-        return $res if $res;
-
-        return [502, "Action '$action' not implemented for ".
-                    "'$req->{-type}' entity"]
-            unless $self->{_typeacts}{ $req->{-type} }{ $action };
-        return $self->$meth($req);
-    }
+    # return success for further processing
+    0;
 }
 
 sub _init {

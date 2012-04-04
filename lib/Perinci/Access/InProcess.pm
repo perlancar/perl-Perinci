@@ -7,7 +7,9 @@ use Log::Any '$log';
 
 use parent qw(Perinci::Access::Base);
 
+use Scalar::Util qw(blessed);
 use SHARYANTO::Package::Util qw(package_exists);
+use URI;
 
 # VERSION
 
@@ -28,101 +30,6 @@ sub _init {
     $self->{load}          //= 1;
     $self->{extra_wrapper_args}    //= {};
     $self->{extra_wrapper_convert} //= {};
-}
-
-sub _before_action {
-    my ($self, $req) = @_;
-    no strict 'refs';
-
-    # parse code entity from URI (cache the result in the request object) & load
-    # module
-
-    my $path = $req->{uri}->path || "/";
-    $req->{-path} = $path;
-
-    my ($package, $module, $leaf);
-    if ($path eq '/') {
-        $package = '/';
-        $leaf    = '';
-        $module  = '';
-    } else {
-        if ($path =~ m!(.+)/+(.*)!) {
-            $package = $1;
-            $leaf    = $2;
-        } else {
-            $package = $path;
-            $leaf    = '';
-        }
-        $module = $package;
-        $module =~ s!^/+!!g;
-        $module =~ s!/+!::!g;
-    }
-
-    return [400, "Invalid syntax in module '$module', ".
-                "please use valid module name"]
-        if $module && $module !~ $re_mod;
-
-    $req->{-package} = $package;
-    $req->{-leaf}    = $leaf;
-    $req->{-module}  = $module;
-
-    if ($module) {
-        my $module_p = $module;
-        $module_p =~ s!::!/!g;
-        $module_p .= ".pm";
-
-        # WISHLIST: cache negative result if someday necessary
-        if ($self->{load}) {
-            unless ($INC{$module_p}) {
-                eval { require $module_p };
-                my $req_err = $@;
-                if ($req_err) {
-                    if (!package_exists($module)) {
-                        return [500, "Can't load module $module (probably ".
-                                    "mistyped or missing module): $req_err"];
-                    } elsif ($req_err !~ m!Can't locate!) {
-                        return [500, "Can't load module $module (probably ".
-                                    "compile error): $req_err"];
-                    }
-                    # require error of "Can't locate ..." can be ignored. it
-                    # might mean package is already defined by other code. we'll
-                    # try and access it anyway.
-                } elsif (!package_exists($module)) {
-                    # shouldn't happen
-                    return [500, "Module loaded OK, but no $module package ".
-                                "found, something's wrong"];
-                } else {
-                    if ($self->{after_load}) {
-                        eval { $self->{after_load}($self, module=>$module) };
-                        return [500, "after_load dies: $@"] if $@;
-                    }
-                }
-            }
-        }
-    }
-
-    # find out type of leaf and other information
-    my $type;
-    my $entity_version;
-    if ($leaf) {
-        if ($leaf =~ /^[%\@\$]/) {
-            # XXX check existence of variable
-            $type = 'variable';
-        } else {
-            return [404, "Can't find function $leaf in $module"]
-                unless defined &{"$module\::$leaf"};
-            $type = 'function';
-        }
-    } else {
-        $type = 'package';
-        $entity_version = ${$module . '::VERSION'};
-    }
-    $req->{-type} = $type;
-    $req->{-entity_version} = $entity_version;
-
-    #$log->tracef("req=%s", $req);
-
-    0;
 }
 
 sub _get_meta_accessor {
@@ -353,6 +260,117 @@ sub action_get {
     [200, "OK", $res];
 }
 
+sub request {
+    no strict 'refs';
+
+    my ($self, $action, $uri, $extra) = @_;
+
+    my $req = { action=>$action, %{$extra // {}} };
+    my $res = $self->check_request($req);
+    return $res if $res;
+
+    my $meth = "action_$action";
+    return [502, "Action '$action' not implemented"] unless
+        $self->can($meth);
+
+    return [400, "Please specify URI"] unless $uri;
+    $uri = URI->new($uri) unless blessed($uri);
+    $req->{uri} = $uri;
+
+    # parse path, package, leaf, module
+
+    my $path = $req->{uri}->path || "/";
+    $req->{-path} = $path;
+
+    my ($package, $module, $leaf);
+    if ($path eq '/') {
+        $package = '/';
+        $leaf    = '';
+        $module  = '';
+    } else {
+        if ($path =~ m!(.+)/+(.*)!) {
+            $package = $1;
+            $leaf    = $2;
+        } else {
+            $package = $path;
+            $leaf    = '';
+        }
+        $module = $package;
+        $module =~ s!^/+!!g;
+        $module =~ s!/+!::!g;
+    }
+
+    return [400, "Invalid syntax in module '$module', ".
+                "please use valid module name"]
+        if $module && $module !~ $re_mod;
+
+    $req->{-package} = $package;
+    $req->{-leaf}    = $leaf;
+    $req->{-module}  = $module;
+
+    if ($module) {
+        my $module_p = $module;
+        $module_p =~ s!::!/!g;
+        $module_p .= ".pm";
+
+        # WISHLIST: cache negative result if someday necessary
+        if ($self->{load}) {
+            unless ($INC{$module_p}) {
+                eval { require $module_p };
+                my $req_err = $@;
+                if ($req_err) {
+                    if (!package_exists($module)) {
+                        return [500, "Can't load module $module (probably ".
+                                    "mistyped or missing module): $req_err"];
+                    } elsif ($req_err !~ m!Can't locate!) {
+                        return [500, "Can't load module $module (probably ".
+                                    "compile error): $req_err"];
+                    }
+                    # require error of "Can't locate ..." can be ignored. it
+                    # might mean package is already defined by other code. we'll
+                    # try and access it anyway.
+                } elsif (!package_exists($module)) {
+                    # shouldn't happen
+                    return [500, "Module loaded OK, but no $module package ".
+                                "found, something's wrong"];
+                } else {
+                    if ($self->{after_load}) {
+                        eval { $self->{after_load}($self, module=>$module) };
+                        return [500, "after_load dies: $@"] if $@;
+                    }
+                }
+            }
+        }
+    }
+
+    # find out type of leaf and other information
+
+    my $type;
+    my $entity_version;
+    if ($leaf) {
+        if ($leaf =~ /^[%\@\$]/) {
+            # XXX check existence of variable
+            $type = 'variable';
+        } else {
+            return [404, "Can't find function $leaf in $module"]
+                unless defined &{"$module\::$leaf"};
+            $type = 'function';
+        }
+    } else {
+        $type = 'package';
+        $entity_version = ${$module . '::VERSION'};
+    }
+    $req->{-type} = $type;
+    $req->{-entity_version} = $entity_version;
+
+    #$log->tracef("req=%s", $req);
+
+    return [502, "Action '$action' not implemented for ".
+                "'$req->{-type}' entity"]
+        unless $self->{_typeacts}{ $req->{-type} }{ $action };
+    $self->$meth($req);
+}
+
 1;
 # ABSTRACT: Use Rinci access protocol (Riap) to access Perl code
 
@@ -490,11 +508,10 @@ Some applications of this include: changing C<default_lang> of metadata.
 
 =back
 
-=head2 $pa->request($action => $uri, \%extra) => $res
+=head2 $pa->request($action => $server_url, \%extra) => $res
 
-Process Riap request and return enveloped result. This method will in turn parse
-URI and other Riap request keys into C<$req> hash, and then call
-C<action_ACTION> methods.
+Process Riap request and return enveloped result. $server_url will be used as
+the Riap request key 'uri', as there is no server in this case.
 
 Some notes:
 
