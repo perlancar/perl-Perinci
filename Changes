@@ -1,5 +1,11 @@
 Revision history for Perinci
 
+0.17     2012-04-04
+
+         Refactor request(), move some stuffs from Access::Base to
+         Access::InProcess to work better with Access::HTTP::Client.
+
+
 0.16     2012-04-04
 
          Add support for remote_request() (for
