@@ -1,5 +1,10 @@
 Revision history for Perinci
 
+0.18     2012-05-02
+
+         No functional changes. Update of Sah schema syntax (Rinci 1.1.15).
+
+
 0.17     2012-04-04
 
          Refactor request(), move some stuffs from Access::Base to
