@@ -78,10 +78,6 @@ sub _init {
     $self->{_typeacts} = \%typeacts;
 }
 
-# can be overriden, should return a response on error, or false if nothing is
-# wrong.
-sub _before_action {}
-
 sub actionmeta_info { +{
     applies_to => ['*'],
     summary    => "Get general information on code entity",
