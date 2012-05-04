@@ -111,19 +111,19 @@ test_request(
     name => 'actions on package',
     req => [actions => "/Perinci/Examples/"],
     status => 200,
-    result => [qw/actions child_metas info list meta/],
+    result => [qw/actions begin child_metas commit discard_all_txs discard_tx info list list_txs meta redo release_savepoint rollback savepoint undo/],
 );
 test_request(
     name => 'actions on function',
     req => [actions => "/Perinci/Examples/gen_array"],
     status => 200,
-    result => [qw/actions call complete_arg_val info meta/],
+    result => [qw/actions begin call commit complete_arg_val discard_all_txs discard_tx info list_txs meta redo release_savepoint rollback savepoint undo/],
 );
 test_request(
     name => 'actions on variable',
     req => [actions => "/Perinci/Examples/\$Var1"],
     status => 200,
-    result => [qw/actions get info meta/],
+    result => [qw/actions begin commit discard_all_txs discard_tx get info list_txs meta redo release_savepoint rollback savepoint undo/],
 );
 # XXX actions: detail
 
