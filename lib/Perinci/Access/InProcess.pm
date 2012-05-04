@@ -16,10 +16,36 @@ use URI;
 our $re_mod = qr/\A[A-Za-z_][A-Za-z_0-9]*(::[A-Za-z_][A-Za-z_0-9]*)*\z/;
 
 sub _init {
+    require Class::Inspector;
     require Tie::Cache;
 
     my ($self) = @_;
-    $self->SUPER::_init();
+
+    # build a list of supported actions for each type of entity
+    my %typeacts = (
+        package  => [],
+        function => [],
+        variable => [],
+    ); # key = type, val = [[ACTION, META], ...]
+
+    my @comacts;
+    for my $meth (@{Class::Inspector->methods(ref $self)}) {
+        next unless $meth =~ /^actionmeta_(.+)/;
+        my $act = $1;
+        my $meta = $self->$meth();
+        for my $type (@{$meta->{applies_to}}) {
+            if ($type eq '*') {
+                push @comacts, [$act, $meta];
+            } else {
+                push @{$typeacts{$type}}, [$act, $meta];
+            }
+        }
+    }
+    for my $type (keys %typeacts) {
+        $typeacts{$type} = { map {$_->[0] => $_->[1]}
+                                 @{$typeacts{$type}}, @comacts };
+    }
+    $self->{_typeacts} = \%typeacts;
 
     # to cache wrapped result
     tie my(%cache), 'Tie::Cache', 100;
@@ -85,179 +111,6 @@ sub _get_code_and_meta {
         }
     }
     [200, "OK", [$code, $meta]];
-}
-
-sub action_list {
-    require Module::List;
-
-    my ($self, $req) = @_;
-    my $detail = $req->{detail};
-    my $f_type = $req->{type} || "";
-
-    my @res;
-
-    # XXX recursive?
-
-    # get submodules
-    unless ($f_type && $f_type ne 'package') {
-        my $lres = Module::List::list_modules(
-            $req->{-module} ? "$req->{-module}\::" : "",
-            {list_modules=>1});
-        my $p0 = $req->{-path};
-        $p0 =~ s!/+$!!;
-        for my $m (sort keys %$lres) {
-            $m =~ s!.+::!!;
-            my $uri = join("", "pl:", $p0, "/", $m, "/");
-            if ($detail) {
-                push @res, {uri=>$uri, type=>"package"};
-            } else {
-                push @res, $uri;
-            }
-        }
-    }
-
-    # get all entities from this module
-    my $res = $self->_get_meta_accessor($req);
-    return $res if $res->[0] != 200;
-    my $ma = $res->[2];
-    my $spec = $ma->get_all_meta($req);
-    my $base = "pl:/$req->{-module}"; $base =~ s!::!/!g;
-    for (sort keys %$spec) {
-        next if /^:/;
-        my $uri = join("", $base, "/", $_);
-        my $t = $_ =~ /^[%\@\$]/ ? 'variable' : 'function';
-        next if $f_type && $f_type ne $t;
-        if ($detail) {
-            push @res, {
-                #v=>1.1,
-                uri=>$uri, type=>$t,
-            };
-        } else {
-            push @res, $uri;
-        }
-    }
-
-    [200, "OK", \@res];
-}
-
-sub action_meta {
-    my ($self, $req) = @_;
-    return [404, "No metadata for /"] unless $req->{-module};
-    my $res = $self->_get_code_and_meta($req);
-    return $res unless $res->[0] == 200;
-    my (undef, $meta) = @{$res->[2]};
-    [200, "OK", $meta];
-}
-
-sub action_call {
-    my ($self, $req) = @_;
-
-    my $res = $self->_get_code_and_meta($req);
-    return $res unless $res->[0] == 200;
-    my ($code, undef) = @{$res->[2]};
-    my $args = $req->{args} // {};
-    $code->(%$args);
-}
-
-sub action_complete_arg_val {
-    my ($self, $req) = @_;
-    my $arg = $req->{arg} or return [400, "Please specify arg"];
-    my $word = $req->{word} // "";
-
-    my $res = $self->_get_code_and_meta($req);
-    return $res unless $res->[0] == 200;
-    my (undef, $meta) = @{$res->[2]};
-    my $args_p = $meta->{args} // {};
-    my $arg_p = $args_p->{$arg} or return [404, "No such function arg"];
-
-    my $words;
-    eval { # completion sub can die, etc.
-
-        if ($arg_p->{completion}) {
-            $words = $arg_p->{completion}(word=>$word);
-            die "Completion sub does not return array"
-                unless ref($words) eq 'ARRAY';
-            return;
-        }
-
-        my $sch = $arg_p->{schema};
-
-        my ($type, $cs) = @{$sch};
-        if ($cs->{'in'}) {
-            $words = $cs->{'in'};
-            return;
-        }
-
-        if ($type =~ /^int\*?$/) {
-            my $limit = 100;
-            if ($cs->{between} &&
-                    $cs->{between}[0] - $cs->{between}[0] <= $limit) {
-                $words = [$cs->{between}[0] .. $cs->{between}[1]];
-                return;
-            } elsif ($cs->{xbetween} &&
-                    $cs->{xbetween}[0] - $cs->{xbetween}[0] <= $limit) {
-                $words = [$cs->{xbetween}[0]+1 .. $cs->{xbetween}[1]-1];
-                return;
-            } elsif (defined($cs->{min}) && defined($cs->{max}) &&
-                         $cs->{max}-$cs->{min} <= $limit) {
-                $words = [$cs->{min} .. $cs->{max}];
-                return;
-            } elsif (defined($cs->{min}) && defined($cs->{xmax}) &&
-                         $cs->{xmax}-$cs->{min} <= $limit) {
-                $words = [$cs->{min} .. $cs->{xmax}-1];
-                return;
-            } elsif (defined($cs->{xmin}) && defined($cs->{max}) &&
-                         $cs->{max}-$cs->{xmin} <= $limit) {
-                $words = [$cs->{xmin}+1 .. $cs->{max}];
-                return;
-            } elsif (defined($cs->{xmin}) && defined($cs->{xmax}) &&
-                         $cs->{xmax}-$cs->{xmin} <= $limit) {
-                $words = [$cs->{min}+1 .. $cs->{max}-1];
-                return;
-            }
-        }
-
-        $words = [];
-    };
-    return [500, "Completion died: $@"] if $@;
-
-    [200, "OK", [grep /^\Q$word\E/, @$words]];
-}
-
-sub action_child_metas {
-    my ($self, $req) = @_;
-
-    my $res = $self->action_list($req);
-    return $res unless $res->[0] == 200;
-    my $ents = $res->[2];
-
-    my %res;
-    for my $ent (@$ents) {
-        $res = $self->request(meta => $ent);
-        # ignore failed request
-        next unless $res->[0] == 200;
-        $res{$ent} = $res->[2];
-    }
-    [200, "OK", \%res];
-}
-
-sub action_get {
-    no strict 'refs';
-
-    my ($self, $req) = @_;
-    local $req->{-leaf} = $req->{-leaf};
-
-    # extract prefix
-    $req->{-leaf} =~ s/^([%\@\$])//
-        or return [500, "BUG: Unknown variable prefix"];
-    my $prefix = $1;
-    my $name = $req->{-module} . "::" . $req->{-leaf};
-    my $res =
-        $prefix eq '$' ? ${$name} :
-            $prefix eq '@' ? \@{$name} :
-                $prefix eq '%' ? \%{$name} :
-                    undef;
-    [200, "OK", $res];
 }
 
 sub request {
@@ -369,6 +222,245 @@ sub request {
                 "'$req->{-type}' entity"]
         unless $self->{_typeacts}{ $req->{-type} }{ $action };
     $self->$meth($req);
+}
+
+sub actionmeta_info { +{
+    applies_to => ['*'],
+    summary    => "Get general information on code entity",
+} }
+
+sub action_info {
+    my ($self, $req) = @_;
+    my $res = {
+        v    => 1.1,
+        uri  => $req->{uri}->as_string,
+        type => $req->{-type},
+    };
+    $res->{entity_version} = $req->{-entity_version}
+        if defined $req->{-entity_version};
+    [200, "OK", $res];
+}
+
+sub actionmeta_actions { +{
+    applies_to => ['*'],
+    summary    => "List available actions for code entity",
+} }
+
+sub action_actions {
+    my ($self, $req) = @_;
+    my @res;
+    for my $k (sort keys %{ $self->{_typeacts}{$req->{-type}} }) {
+        my $v = $self->{_typeacts}{$req->{-type}}{$k};
+        if ($req->{detail}) {
+            push @res, {name=>$k, summary=>$v->{summary}};
+        } else {
+            push @res, $k;
+        }
+    }
+    [200, "OK", \@res];
+}
+
+sub actionmeta_list { +{
+    applies_to => ['package'],
+    summary    => "List code entities inside this package code entity",
+} }
+
+sub action_list {
+    require Module::List;
+
+    my ($self, $req) = @_;
+    my $detail = $req->{detail};
+    my $f_type = $req->{type} || "";
+
+    my @res;
+
+    # XXX recursive?
+
+    # get submodules
+    unless ($f_type && $f_type ne 'package') {
+        my $lres = Module::List::list_modules(
+            $req->{-module} ? "$req->{-module}\::" : "",
+            {list_modules=>1});
+        my $p0 = $req->{-path};
+        $p0 =~ s!/+$!!;
+        for my $m (sort keys %$lres) {
+            $m =~ s!.+::!!;
+            my $uri = join("", "pl:", $p0, "/", $m, "/");
+            if ($detail) {
+                push @res, {uri=>$uri, type=>"package"};
+            } else {
+                push @res, $uri;
+            }
+        }
+    }
+
+    # get all entities from this module
+    my $res = $self->_get_meta_accessor($req);
+    return $res if $res->[0] != 200;
+    my $ma = $res->[2];
+    my $spec = $ma->get_all_meta($req);
+    my $base = "pl:/$req->{-module}"; $base =~ s!::!/!g;
+    for (sort keys %$spec) {
+        next if /^:/;
+        my $uri = join("", $base, "/", $_);
+        my $t = $_ =~ /^[%\@\$]/ ? 'variable' : 'function';
+        next if $f_type && $f_type ne $t;
+        if ($detail) {
+            push @res, {
+                #v=>1.1,
+                uri=>$uri, type=>$t,
+            };
+        } else {
+            push @res, $uri;
+        }
+    }
+
+    [200, "OK", \@res];
+}
+
+sub actionmeta_meta { +{
+    applies_to => ['*'],
+    summary    => "Get metadata",
+} }
+
+sub action_meta {
+    my ($self, $req) = @_;
+    return [404, "No metadata for /"] unless $req->{-module};
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my (undef, $meta) = @{$res->[2]};
+    [200, "OK", $meta];
+}
+
+sub actionmeta_call { +{
+    applies_to => ['function'],
+    summary    => "Call function",
+} }
+
+sub action_call {
+    my ($self, $req) = @_;
+
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my ($code, undef) = @{$res->[2]};
+    my $args = $req->{args} // {};
+    $code->(%$args);
+}
+
+sub actionmeta_complete_arg_val { +{
+    applies_to => ['function'],
+    summary    => "Complete function's argument value"
+} }
+
+sub action_complete_arg_val {
+    my ($self, $req) = @_;
+    my $arg = $req->{arg} or return [400, "Please specify arg"];
+    my $word = $req->{word} // "";
+
+    my $res = $self->_get_code_and_meta($req);
+    return $res unless $res->[0] == 200;
+    my (undef, $meta) = @{$res->[2]};
+    my $args_p = $meta->{args} // {};
+    my $arg_p = $args_p->{$arg} or return [404, "No such function arg"];
+
+    my $words;
+    eval { # completion sub can die, etc.
+
+        if ($arg_p->{completion}) {
+            $words = $arg_p->{completion}(word=>$word);
+            die "Completion sub does not return array"
+                unless ref($words) eq 'ARRAY';
+            return;
+        }
+
+        my $sch = $arg_p->{schema};
+
+        my ($type, $cs) = @{$sch};
+        if ($cs->{'in'}) {
+            $words = $cs->{'in'};
+            return;
+        }
+
+        if ($type =~ /^int\*?$/) {
+            my $limit = 100;
+            if ($cs->{between} &&
+                    $cs->{between}[0] - $cs->{between}[0] <= $limit) {
+                $words = [$cs->{between}[0] .. $cs->{between}[1]];
+                return;
+            } elsif ($cs->{xbetween} &&
+                    $cs->{xbetween}[0] - $cs->{xbetween}[0] <= $limit) {
+                $words = [$cs->{xbetween}[0]+1 .. $cs->{xbetween}[1]-1];
+                return;
+            } elsif (defined($cs->{min}) && defined($cs->{max}) &&
+                         $cs->{max}-$cs->{min} <= $limit) {
+                $words = [$cs->{min} .. $cs->{max}];
+                return;
+            } elsif (defined($cs->{min}) && defined($cs->{xmax}) &&
+                         $cs->{xmax}-$cs->{min} <= $limit) {
+                $words = [$cs->{min} .. $cs->{xmax}-1];
+                return;
+            } elsif (defined($cs->{xmin}) && defined($cs->{max}) &&
+                         $cs->{max}-$cs->{xmin} <= $limit) {
+                $words = [$cs->{xmin}+1 .. $cs->{max}];
+                return;
+            } elsif (defined($cs->{xmin}) && defined($cs->{xmax}) &&
+                         $cs->{xmax}-$cs->{xmin} <= $limit) {
+                $words = [$cs->{min}+1 .. $cs->{max}-1];
+                return;
+            }
+        }
+
+        $words = [];
+    };
+    return [500, "Completion died: $@"] if $@;
+
+    [200, "OK", [grep /^\Q$word\E/, @$words]];
+}
+
+sub actionmeta_child_metas { +{
+    applies_to => ['package'],
+    summary    => "Get metadata of all child entities",
+} }
+
+sub action_child_metas {
+    my ($self, $req) = @_;
+
+    my $res = $self->action_list($req);
+    return $res unless $res->[0] == 200;
+    my $ents = $res->[2];
+
+    my %res;
+    for my $ent (@$ents) {
+        $res = $self->request(meta => $ent);
+        # ignore failed request
+        next unless $res->[0] == 200;
+        $res{$ent} = $res->[2];
+    }
+    [200, "OK", \%res];
+}
+
+sub actionmeta_get { +{
+    applies_to => ['variable'],
+    summary    => "Get value of variable",
+} }
+
+sub action_get {
+    no strict 'refs';
+
+    my ($self, $req) = @_;
+    local $req->{-leaf} = $req->{-leaf};
+
+    # extract prefix
+    $req->{-leaf} =~ s/^([%\@\$])//
+        or return [500, "BUG: Unknown variable prefix"];
+    my $prefix = $1;
+    my $name = $req->{-module} . "::" . $req->{-leaf};
+    my $res =
+        $prefix eq '$' ? ${$name} :
+            $prefix eq '@' ? \@{$name} :
+                $prefix eq '%' ? \%{$name} :
+                    undef;
+    [200, "OK", $res];
 }
 
 1;
