@@ -250,9 +250,12 @@ sub request {
             return [500, "Can't initialize tx_manager ($txm_cl): $@"] if $@;
         }
 
-        my $tx = $self->{_tx_manager}->cur_tx;
-        if ($am->{tx}{required_tx_status}) {
-            return [] unless $tx && $tx->{~~ $am->{tx}{required_tx_status};
+        my $tx = $self->{_tx_manager}->get_active_tx_id;
+        my $reqst = $am->{tx}{required_tx_status};
+        if ($reqst) {
+            return [432, "Transaction status incorrect, expected: " .
+                        ref($reqst) eq 'ARRAY' ? join("|", @$reqst) : $reqst]
+                unless $tx && $tx->{status} ~~ $reqst;
         }
     }
 
