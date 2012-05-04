@@ -17,20 +17,21 @@ our $re_var     = qr/\A[A-Za-z_][A-Za-z_0-9]*\z/;
 our $re_req_key = $re_var;
 our $re_action  = $re_var;
 
+# do some basic checks on request
 sub check_request {
     my ($self, $req) = @_;
-
-    # check args
 
     # XXX schema
     #$req //= {};
     #return [400, "Invalid req: must be hashref"]
     #    unless ref($req) eq 'HASH';
-    for my $k (keys %$req) {
-        return [400, "Invalid request key '$k', ".
-                    "please only use letters/numbers"]
-            unless $k =~ $re_req_key;
-    }
+
+    # skipped for squeezing out performance
+    #for my $k (keys %$req) {
+    #    return [400, "Invalid request key '$k', ".
+    #                "please only use letters/numbers"]
+    #        unless $k =~ $re_req_key;
+    #}
 
     $req->{v} //= 1.1;
     return [500, "Protocol version not supported"] if $req->{v} ne '1.1';
