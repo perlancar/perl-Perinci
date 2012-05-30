@@ -51,13 +51,17 @@ sub _init {
     tie my(%cache), 'Tie::Cache', 100;
     $self->{_cache} = \%cache;
 
-    # attributes
+    $self->{use_tx}                //= 0;
+    if ($self->{use_tx}) {
+        require Perinci::Access::InProcess::Tx;
+    }
+    $self->{custom_tx_manager}     //= undef;
+
+    # other attributes
     $self->{meta_accessor} //= "Perinci::Access::InProcess::MetaAccessor";
     $self->{load}                  //= 1;
     $self->{extra_wrapper_args}    //= {};
     $self->{extra_wrapper_convert} //= {};
-    $self->{use_tx}                //= 0;
-    $self->{custom_tx_manager}     //= undef;
 }
 
 sub _get_meta_accessor {
@@ -227,38 +231,6 @@ sub request {
     # check transaction
 
     my $mmeth = "actionmeta_$action";
-    my $am = $self->$mmeth;
-    if ($am->{tx}) {
-        #$self->tracef("Action %s is transaction-related");
-        return [501, "Transaction is not implemented"] unless $self->{use_tx};
-
-        # initialize transaction manager
-        if (ref($self->{custom_tx_manager}) eq 'CODE') {
-            $self->{_tx_manager} = $self->{custom_tx_manager}->($self);
-            return [500, "BUG: custom_tx_manager ".
-                        "did not return tx_manager object"]
-                unless blessed($self->{_tx_manager});
-        } elsif (blessed $self->{_tx_manager}) {
-            my $txm_cl = $self->{custom_tx_manager} // "Perinci::TxMgr";
-            my $txm_cl_p = $txm_cl; $txm_cl_p =~ s!::!/!g; $txm_cl .= ".pm";
-            eval {
-                require $txm_cl_p;
-                $self->{_tx_manager} = $txm_cl->new;
-                die "BUG: _tx_manager object not created?"
-                    unless blessed($self->{_tx_manager});
-            };
-            return [500, "Can't initialize tx_manager ($txm_cl): $@"] if $@;
-        }
-
-        my $tx = $self->{_tx_manager}->get_active_tx_id;
-        my $reqst = $am->{tx}{required_tx_status};
-        if ($reqst) {
-            return [432, "Transaction status incorrect, expected: " .
-                        ref($reqst) eq 'ARRAY' ? join("|", @$reqst) : $reqst]
-                unless $tx && $tx->{status} ~~ $reqst;
-        }
-    }
-
     $self->$meth($req);
 }
 
@@ -501,140 +473,6 @@ sub action_get {
     [200, "OK", $res];
 }
 
-sub actionmeta_begin { +{
-    applies_to => ['*'],
-    summary    => "Begin a transaction",
-    tx         => {
-        requires_tx_id     => -1, # 0=opt, 1=y, -1=client must not specify tx_id
-    },
-} }
-
-sub action_begin {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_commit { +{
-    applies_to => ['*'],
-    summary    => "Commit a transaction",
-    tx         => {
-        requires_tx_id     => 1, # 0=opt, 1=y, -1=client must not specify tx_id
-        required_tx_status => 'in progress',
-    },
-} }
-
-sub action_commit {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_savepoint { +{
-    applies_to => ['*'],
-    summary    => "Create a savepoint in a transaction",
-    tx         => {
-        requires_tx_id     => 1, # 0=opt, 1=y, -1=client must not specify tx_id
-        required_tx_status => 'in progress',
-    },
-} }
-
-sub action_savepoint {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_release_savepoint { +{
-    applies_to => ['*'],
-    summary    => "Release a transaction savepoint",
-    tx         => {
-        requires_tx_id     => 0, # 0=opt, 1=y, -1=client must not specify tx_id
-        required_tx_status => 'in progress',
-    },
-} }
-
-sub action_release_savepoint {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_rollback { +{
-    applies_to => ['*'],
-    summary    => "Rollback a transaction (optionally to a savepoint)",
-    tx         => {
-        requires_tx_id     => 0, # 0=opt, 1=y, -1=client must not specify tx_id
-        required_tx_status => ['in progress', 'aborted'],
-    },
-} }
-
-sub action_rollback {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_list_txs { +{
-    applies_to => ['*'],
-    summary    => "List transactions",
-    tx         => {
-        requires_tx_id     => 0, # 0=opt, 1=y, -1=client must not specify tx_id
-    },
-} }
-
-sub action_list_txs {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_undo { +{
-    applies_to => ['*'],
-    summary    => "Undo a committed transaction",
-    tx         => {
-        requires_tx_id     => 0, # 0=opt, 1=y, -1=client must not specify tx_id
-    },
-} }
-
-sub action_undo {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_redo { +{
-    applies_to => ['*'],
-    summary    => "Redo an undone committed transaction",
-    tx         => {
-        requires_tx_id     => 0, # 0=opt, 1=y, -1=client must not specify tx_id
-    },
-} }
-
-sub action_redo {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_discard_tx { +{
-    applies_to => ['*'],
-    summary    => "Discard (forget) a committed transaction",
-    tx         => {
-        requires_tx_id     => 1, # 0=opt, 1=y, -1=client must not specify tx_id
-    },
-} }
-
-sub action_discard_tx {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
-sub actionmeta_discard_all_txs { +{
-    applies_to => ['*'],
-    summary    => "Discard (forget) all committed transactions",
-    tx         => {
-        requires_tx_id     => -1, # 0=opt, 1=y, -1=client must not specify tx_id
-    },
-} }
-
-sub action_discard_all_txs {
-    my ($self, $req) = @_;
-    [501, "Not yet implemented"];
-}
-
 1;
 # ABSTRACT: Use Rinci access protocol (Riap) to access Perl code
 
@@ -727,7 +565,8 @@ get a consistent interface.
 
 =item * Transaction/undo
 
-This class implements L<Riap::Transaction>.
+This class implements L<Riap::Transaction>. See
+L<Perinci::Access::InProcess::Tx> for more details.
 
 =back
 
@@ -793,13 +632,16 @@ server to store transaction/undo data, this must be explicitly allowed.
 Can be set to a string (class name) or a code that is expected to return a
 transaction manager class.
 
-By default, L<Perinci::TxMgr> is instantiated and maintained (not reinstantiated
-on every request), but if C<custom_tx_manager> is a coderef, it will be called
-on each request to get transaction manager.
+By default, L<Perinci::Tx::Manager> is instantiated and maintained (not
+reinstantiated on every request), but if C<custom_tx_manager> is a coderef, it
+will be called on each request to get transaction manager.
 
-This can be used to instantiate L<Perinci::TxMgr> in a custom way, e.g.
+This can be used to instantiate L<Perinci::Tx::Manager> in a custom way, e.g.
 specifying per-user transaction data directory and limits, which needs to be
 done on a per-request basis.
+
+You will need to install L<Perinci::Tx::Manager> (not installed automatically
+when you install this distribution).
 
 =back
 
