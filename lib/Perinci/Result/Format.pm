@@ -63,7 +63,7 @@ sub format {
 
 =head1 DESCRIPTION
 
-This module format enveloped result to YAML, JSON, etc. It uses
+This module formats enveloped result to YAML, JSON, etc. It uses
 L<Data::Format::Pretty> for the backend. It is used by other Perinci modules
 like L<Perinci::CmdLine> and L<Perinci::Access::HTTP::Server>.
 
