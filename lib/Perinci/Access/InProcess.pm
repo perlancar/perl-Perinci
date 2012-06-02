@@ -640,9 +640,6 @@ This can be used to instantiate L<Perinci::Tx::Manager> in a custom way, e.g.
 specifying per-user transaction data directory and limits, which needs to be
 done on a per-request basis.
 
-You will need to install L<Perinci::Tx::Manager> (not installed automatically
-when you install this distribution).
-
 =back
 
 =head2 $pa->request($action => $server_url, \%extra) => $res
