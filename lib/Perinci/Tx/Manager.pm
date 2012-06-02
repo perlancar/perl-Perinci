@@ -12,33 +12,40 @@ use Time::HiRes qw(time);
 
 my $json = JSON->new->allow_nonref;
 
+# note: no method should die(), because we are called by
+# Perinci::Access::InProcess and in turn it is called by
+# Perinci::Access::HTTP::Server without extra eval().
+
+# new() should return an error string if failed
 sub new {
     my ($class, %opts) = @_;
     my $obj = bless \%opts, $class;
     if (!$opts{data_dir}) {
         for ("$ENV{HOME}/.perinci", "$ENV{HOME}/.perinci/.tx") {
             unless (-d $_) {
-                mkdir $_ or die "Can't mkdir $_: $!";
+                mkdir $_ or return "Can't mkdir $_: $!";
             }
         }
         $opts{data_dir} = "$ENV{HOME}/.perinci/.tx";
     }
-    $obj->_init;
+    my $res = $obj->_init;
+    return $res if $res;
     $obj;
 }
 
+# return undef on success, or an error string on failure
 sub _init {
     my ($self) = @_;
     my $data_dir = $self->{data_dir};
     $log->tracef("Initializing tx data dir %s ...", $data_dir);
 
     (-d $data_dir)
-        or die "Transaction data dir ($data_dir) doesn't exist or not a dir";
+        or return "Transaction data dir ($data_dir) doesn't exist or not a dir";
     my $dbh = DBI->connect("dbi:SQLite:dbname=$data_dir/tx.db", undef, undef,
-                       {RaiseError=>0});
+                           {RaiseError=>0});
 
     # init database
-    $dbh->do(<<_) or die "Can't init tx db: create tx: ". $dbh->errstr;
+    $dbh->do(<<_) or return "Can't init tx db: create tx: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS tx (
     ser_id INTEGER PRIMARY KEY AUTOINCREMENT,
     str_id VARCHAR(200) NOT NULL,
@@ -51,7 +58,7 @@ CREATE TABLE IF NOT EXISTS tx (
     UNIQUE (str_id)
 )
 _
-    $dbh->do(<<_) or die "Can't init tx db: create txcall: ". $dbh->errstr;
+    $dbh->do(<<_) or return "Can't init tx db: create txcall: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS txcall (
     tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +66,7 @@ CREATE TABLE IF NOT EXISTS txcall (
     args TEXT NOT NULL
 )
 _
-    $dbh->do(<<_) or die "Can't init tx db: create txcall: ". $dbh->errstr;
+    $dbh->do(<<_) or return "Can't init tx db: create txcall: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS txstep (
     call_id INT NOT NULL, -- refers txcall(id)
     -- seq INTEGER NOT NULL, -- uses ROWID instead, sqlite-specific
@@ -75,6 +82,7 @@ _
     $self->recover;
 }
 
+# return undef on success, or an error string on failure
 sub recover {
     my ($self) = @_;
     $log->tracef("[txm] Performing recovery ...");
@@ -86,6 +94,8 @@ sub recover {
     # XXX unlock database
 }
 
+# store _tx_id attribute so method calls don't have to specify tx_id. this is
+# just a convenience.
 sub _tx_id {
     my ($self, $tx_id) = @_;
     $self->{_tx_id} = $tx_id;
@@ -121,7 +131,7 @@ sub __resp_tx_status {
 # wrap() will also put current transaction record to $self->{_cur_tx}
 sub _wrap {
     my ($self, %wargs) = @_;
-    my $margs = $wargs{args} or die "BUG: args not passed to _wrap()";
+    my $margs = $wargs{args} or return [500, "BUG: args not passed to _wrap()"];
     my @caller = caller(1);
     $log->tracef("[txm] -> %s(%s)", $caller[3], $margs);
 
@@ -326,11 +336,12 @@ sub commit {
 sub _rollback {
     my ($self) = @_;
     my $tx = $self->{_cur_tx};
-    die "BUG: _rollback called without transaction" unless $tx;
+    return [500, "BUG: _rollback called without transaction"] unless $tx;
     $log->tracef("[txm] Rolling back tx #%d (%s) ...",
                  $tx->{ser_id}, $tx->{str_id});
     my $dbh = $self->{_dbh};
 
+    my $step_id;
     eval {
         # XXX perform undo of all steps
         my $now = time();
@@ -341,7 +352,8 @@ sub _rollback {
         my $now = time();
         $dbh->do("UPDATE tx SET status='U', mtime=? WHERE ser_id=?", {},
                  $tx->{ser_id});
-        die $@;
+        return [500, "Rollback failure for tx #$tx->{ser_id}".
+                    ($step_id ? " step #$step_id" : "").": $@"];
     }
 }
 
