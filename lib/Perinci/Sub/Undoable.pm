@@ -10,7 +10,11 @@ use URI;
 
 # VERSION
 
-sub do_undo {
+our %SPEC;
+
+$SPEC = {
+};
+sub  {
     my %args = @_;
 }
 
@@ -19,7 +23,7 @@ sub do_undo {
 
 =head1 SYNOPSIS
 
- use Perinci::Sub::Undoable;
+ use Perinci::Sub::Undoable qw//;
 
  our %SPEC;
 
@@ -33,7 +37,9 @@ sub do_undo {
      },
  };
  sub myfunc {
-     do_undo();
+     my %args = @_;
+     do_undo(
+     );
  }
 
 
@@ -43,41 +49,8 @@ This module provides a helper to write undoable/transactional functions (as well
 as functions that support dry-run and are idempotent).
 
 
-=head1 METHODS
-
-=head2 new(%opts) -> OBJ
-
-Create new instance. Known options:
-
-=over 4
-
-=item * handlers (HASH)
-
-A mapping of scheme names and class names or objects. If values are class names,
-they will be require'd and instantiated. The default is:
-
- {
-   riap         => 'Perinci::Access::InProcess',
-   pl           => 'Perinci::Access::InProcess',
-   http         => 'Perinci::Access::HTTP::Client',
-   https        => 'Perinci::Access::HTTP::Client',
-   'riap+tcp'   => 'Perinci::Access::TCP::Client',
- }
-
-Objects can be given instead of class names. This is used if you need to pass
-special options when instantiating the class.
-
-=back
-
-=head2 $pa->request($action, $server_url, \%extra) -> RESP
-
-Send Riap request to Riap server. Pass the request to the appropriate Riap
-client (as configured in C<handlers> constructor options). RESP is the enveloped
-result.
-
-
 =head1 SEE ALSO
 
-L<Perinci>, L<Riap>
+L<Perinci>
 
 =cut

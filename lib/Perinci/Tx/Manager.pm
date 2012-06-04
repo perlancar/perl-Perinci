@@ -6,6 +6,7 @@ use warnings;
 use DBI;
 use JSON;
 use Log::Any '$log';
+use Scalar::Util qw(blessed);
 use Time::HiRes qw(time);
 
 # VERSION
@@ -19,6 +20,10 @@ my $json = JSON->new->allow_nonref;
 # new() should return an error string if failed
 sub new {
     my ($class, %opts) = @_;
+    return "Please supply pa object" unless blessed $opts{pa};
+    return "pa object must be an instance of Perinci::Access::InProcess"
+        unless $opts{pa}->isa("Perinci::Access::InProcess");
+
     my $obj = bless \%opts, $class;
     if (!$opts{data_dir}) {
         for ("$ENV{HOME}/.perinci", "$ENV{HOME}/.perinci/.tx") {
@@ -37,7 +42,7 @@ sub new {
 sub _init {
     my ($self) = @_;
     my $data_dir = $self->{data_dir};
-    $log->tracef("Initializing tx data dir %s ...", $data_dir);
+    $log->tracef("[txm] Initializing data dir %s ...", $data_dir);
 
     (-d $data_dir)
         or return "Transaction data dir ($data_dir) doesn't exist or not a dir";
@@ -59,7 +64,7 @@ CREATE TABLE IF NOT EXISTS tx (
 )
 _
     $dbh->do(<<_) or return "Can't init tx db: create txcall: ". $dbh->errstr;
-CREATE TABLE IF NOT EXISTS txcall (
+CREATE TABLE IF NOT EXISTS call (
     tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     f TEXT NOT NULL,
@@ -67,7 +72,7 @@ CREATE TABLE IF NOT EXISTS txcall (
 )
 _
     $dbh->do(<<_) or return "Can't init tx db: create txcall: ". $dbh->errstr;
-CREATE TABLE IF NOT EXISTS txstep (
+CREATE TABLE IF NOT EXISTS step (
     call_id INT NOT NULL, -- refers txcall(id)
     -- seq INTEGER NOT NULL, -- uses ROWID instead, sqlite-specific
     name TEXT, -- for named savepoint
@@ -79,6 +84,7 @@ CREATE TABLE IF NOT EXISTS txstep (
 _
 
     $self->{_dbh} = $dbh;
+    $log->tracef("[txm] Data dir initialization finished");
     $self->recover;
 }
 
@@ -92,6 +98,9 @@ sub recover {
     # XXX find all transaction with status A, u, d. Rollback them.
 
     # XXX unlock database
+
+    $log->tracef("[txm] Recovery finished");
+    return;
 }
 
 # store _tx_id attribute so method calls don't have to specify tx_id. this is
@@ -131,9 +140,12 @@ sub __resp_tx_status {
 # wrap() will also put current transaction record to $self->{_cur_tx}
 sub _wrap {
     my ($self, %wargs) = @_;
-    my $margs = $wargs{args} or return [500, "BUG: args not passed to _wrap()"];
+    my $margs = $wargs{args}
+        or return [500, "BUG: args not passed to _wrap()"];
     my @caller = caller(1);
-    $log->tracef("[txm] -> %s(%s)", $caller[3], $margs);
+    $log->tracef("[txm] -> %s(%s)", $caller[3],
+                 { map {$_=>$margs->{$_}}
+                       grep {!/^-/ && !/^args$/} keys %$margs });
 
     my $res;
 
@@ -146,7 +158,8 @@ sub _wrap {
         unless length($tx_id) <= 200;
 
     my $dbh = $self->{_dbh};
-    $dbh->begin_work or return [532, "SQLite: Can't begin: ".$dbh->errstr];
+    $dbh->begin_work or return [532, "txm: Can't begin: ".$dbh->errstr];
+    local $self->{_sqlite_tx} = 1;
 
     my $r = $dbh->selectrow_hashref(
         "SELECT ser_id, str_id, status FROM tx WHERE str_id=?", {}, $tx_id);
@@ -191,7 +204,7 @@ sub _wrap {
         }
     }
 
-    $dbh->commit or return [532, "SQLite: Can't commit: ".$dbh->errstr];
+    $dbh->commit or return [532, "Can't commit: ".$dbh->errstr];
 
     if ($wargs{hook_after_commit}) {
         my $res2 = $wargs{hook_after_tx}->(%$margs);
@@ -218,7 +231,7 @@ sub begin {
                          "ctime, mtime) VALUES (?,?,?,?, ?,?)", {},
                      $args{tx_id}, $args{client_token}//"", $args{summary}, "I",
                      $now, $now,
-                 ) or return [532, "SQLite: Can't insert tx: ".$dbh->errstr];
+                 ) or return [532, "Can't insert tx: ".$dbh->errstr];
 
             $self->_tx_id($args{tx_id});
             [200, "OK"];
@@ -254,7 +267,7 @@ sub record_call {
             my $dbh = $self->{_dbh};
             my $f = $args{f} // $caller[3];
             my $now = time();
-            $dbh->do("INSERT INTO txcall (tx_ser_id, f, args) ".
+            $dbh->do("INSERT INTO call (tx_ser_id, f, args) ".
                          "VALUES (?,?,?)", {},
                      $self->{_cur_tx}{ser_id}, $f, $eargs)
                 or return [532, "SQLite: Can't insert txcall: ".$dbh->errstr];
@@ -299,7 +312,7 @@ sub record_step {
             return [400, "call_id does not exist in database"] unless $rc;
 
             my $now = time();
-            $dbh->do("INSERT INTO txstep (ctime, mtime, call_id, ".
+            $dbh->do("INSERT INTO step (ctime, mtime, call_id, ".
                          "undo_step, redo_step) VALUES (?,?,?, ?,?)", {},
                      $now, $now, $args{call_id},
                      $eundo_step, $eredo_step)
@@ -332,7 +345,16 @@ sub commit {
     );
 }
 
-# dies on failure
+sub _get_func_and_meta {
+    my ($self, $func) = @_;
+
+    my ($module, $leaf) = $func =~ /(.+)::(.+)/
+        or return [400, "Not a valid fully qualified function name: $func"];
+    my $res = $self->{pa}->_get_code_and_meta({
+        -module=>$module, -leaf=>$leaf, -type=>'function'});
+    $res;
+}
+
 sub _rollback {
     my ($self) = @_;
     my $tx = $self->{_cur_tx};
@@ -343,10 +365,22 @@ sub _rollback {
 
     my $step_id;
     eval {
-        # XXX perform undo of all steps
         my $now = time();
         $dbh->do("UPDATE tx SET status='R', mtime=? WHERE ser_id=?", {},
-                 $now, $tx->{ser_id});
+                 $now, $tx->{ser_id})
+            or die "Can't update transaction status: ".$dbh->errstr;
+
+        # we need to commit this first so other clients see it
+        $dbh->commit;
+
+        # XXX get all calls
+        #my @calls;
+        #$dbh->
+
+        # XXX get all steps for all calls
+
+        # XXX perform all the undo steps
+
     };
     if ($@) {
         my $now = time();
@@ -407,13 +441,13 @@ sub discard_all {
 
 =head1 DESCRIPTION
 
-This class implements transaction and undo manager (TM).
+This class implements transaction and undo manager (TM). It is meant to be
+instantiated by L<Perinci::Access::InProcess>, but will also be passed to
+transactional functions to save undo/redo data.
 
-It uses SQLite database to store transaction list and undo data as well as
+It uses SQLite database to store transaction list and undo/redo data as well as
 transaction data directory to provide trash_dir/tmp_dir for functions that
 require it.
-
-It is used by L<Perinci::Access::InProcess>.
 
 
 =head1 METHODS
@@ -471,6 +505,13 @@ Limit the maximum age of committed transactions (in seconds). If this limit is
 reached, the old transactions will start to be purged.
 
 Not yet implemented.
+
+=item * pa => OBJ
+
+Perinci::Access::InProcess object. This is required by Perinci::Tx::Manager to
+load/get functions when it wants to perform undo/redo/recovery.
+Perinci::Access::InProcess conveniently require() the Perl modules and wraps the
+functions.
 
 =back
 

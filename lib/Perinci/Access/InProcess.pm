@@ -483,7 +483,6 @@ sub _pre_tx_action {
         unless $self->{use_tx};
 
     # instantiate custom tx manager, per request if necessary
-    my $am = $self->$mmeth;
     if (ref($self->{custom_tx_manager}) eq 'CODE') {
         eval {
             $self->{_tx} = $self->{custom_tx_manager}->($self);
@@ -496,7 +495,7 @@ sub _pre_tx_action {
         my $txm_cl_p = $txm_cl; $txm_cl_p =~ s!::!/!g; $txm_cl .= ".pm";
         eval {
             require $txm_cl_p;
-            $self->{_tx} = $txm_cl->new;
+            $self->{_tx} = $txm_cl->new(pa => $self);
             die $self->{_tx} unless blessed($self->{_tx});
         };
         return [500, "Can't initialize tx manager ($txm_cl): $@"] if $@;
