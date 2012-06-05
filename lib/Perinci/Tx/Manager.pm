@@ -4,6 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 use DBI;
+use File::Flock;
 use JSON;
 use Log::Any '$log';
 use Scalar::Util qw(blessed);
@@ -13,9 +14,16 @@ use Time::HiRes qw(time);
 
 my $json = JSON->new->allow_nonref;
 
-# note: no method should die(), because we are called by
-# Perinci::Access::InProcess and in turn it is called by
-# Perinci::Access::HTTP::Server without extra eval().
+# note: to avoid confusion, whenever we mention 'transaction' (or tx for short)
+# in the code, we must always specify whether it is a sqlite tx (sqltx) or a
+# Rinci tx (Rtx).
+
+# note: no method should die(), they all should return error message/response
+# instead. this is because we are called by Perinci::Access::InProcess and in
+# turn it is called by Perinci::Access::HTTP::Server without extra eval().
+
+# note: we have not dealt with sqlite's rowid wraparound. since it's a 64-bit
+# integer, we're pretty safe. we also usually rely on ctime first for sorting.
 
 # new() should return an error string if failed
 sub new {
@@ -44,9 +52,21 @@ sub _init {
     my $data_dir = $self->{data_dir};
     $log->tracef("[txm] Initializing data dir %s ...", $data_dir);
 
+    # TMP
+    unless (-d "$self->{data_dir}/.trash") {
+        mkdir "$self->{data_dir}/.trash"
+            or return "Can't create .trash dir: $!";
+    }
+    unless (-d "$self->{data_dir}/.tmp") {
+        mkdir "$self->{data_dir}/.tmp"
+            or return "Can't create .tmp dir: $!";
+    }
+
+    $self->{_db_file} = "$data_dir/tx.db";
+
     (-d $data_dir)
         or return "Transaction data dir ($data_dir) doesn't exist or not a dir";
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$data_dir/tx.db", undef, undef,
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$self->{_db_file}", undef, undef,
                            {RaiseError=>0});
 
     # init database
@@ -63,44 +83,158 @@ CREATE TABLE IF NOT EXISTS tx (
     UNIQUE (str_id)
 )
 _
-    $dbh->do(<<_) or return "Can't init tx db: create txcall: ". $dbh->errstr;
+    $dbh->do(<<_) or return "Can't init tx db: create call: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS call (
     tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ctime REAL NOT NULL,
     f TEXT NOT NULL,
     args TEXT NOT NULL
 )
 _
-    $dbh->do(<<_) or return "Can't init tx db: create txcall: ". $dbh->errstr;
+    $dbh->do(<<_) or return "Can't init tx db: create step: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS step (
     call_id INT NOT NULL, -- refers txcall(id)
     -- seq INTEGER NOT NULL, -- uses ROWID instead, sqlite-specific
     name TEXT, -- for named savepoint
     ctime REAL NOT NULL,
     mtime REAL NOT NULL,
-    undo_step BLOB NOT NULL,
-    redo_step BLOB
+    step BLOB NOT NULL,
+    undo_step BLOB NOT NULL
 )
 _
 
     $self->{_dbh} = $dbh;
     $log->tracef("[txm] Data dir initialization finished");
-    $self->recover;
+    $self->_recover;
+}
+
+sub _lock_db {
+    my ($self, $shared) = @_;
+
+    my $locked;
+    my $secs = 0;
+    for (1..5) {
+        $locked = lock("$self->{_db_file}", $shared, "nonblocking");
+        last if $locked;
+        sleep    $_;
+        $secs += $_;
+    }
+    return "Tx database is still locked by other process (probably recovery) ".
+        "after $secs seconds, giving up" unless $locked;
+    return;
+}
+
+sub _unlock_db {
+    my ($self) = @_;
+
+    unlock("$self->{_db_file}");
+    return;
+}
+
+# return an enveloped response
+sub _get_func_and_meta {
+    my ($self, $func) = @_;
+
+    my ($module, $leaf) = $func =~ /(.+)::(.+)/
+        or return [400, "Not a valid fully qualified function name: $func"];
+    my $res = $self->{pa}->_get_code_and_meta({
+        -module=>$module, -leaf=>$leaf, -type=>'function'});
+    $res;
 }
 
 # return undef on success, or an error string on failure
-sub recover {
+sub _rollback {
+    my ($self) = @_;
+    my $tx = $self->{_cur_tx};
+    return [200, "Nothing done, no current transaction"] unless $tx;
+
+    $log->tracef("[txm] Rolling back tx #%d (%s) ...",
+                 $tx->{ser_id}, $tx->{str_id});
+    my $dbh = $self->{_dbh};
+
+    $dbh->rollback;
+
+    # we're now in sqlite autocommit mode, we use this mode for the following
+    # reasons: 1) after we set Rtx status to 'A', we need other clients to see
+    # so they do not try to add steps to it. also after that, each function call
+    # will involve record_call() and record_step() that are all separate
+    # sqltx's.
+
+    my (@calls, $i_call, $call);
+    eval {
+        my $now = time();
+        $dbh->do("UPDATE tx SET status='A', mtime=? WHERE ser_id=? ".
+                     "AND status IN ('I')",
+                 {}, $now, $tx->{ser_id})
+            or die "Can't update tx status: ".$dbh->errstr;
+
+        # for safety
+        my @r = $dbh->selectrow_array("SELECT status FROM tx WHERE ser_id=?",
+                                      {}, $tx->{ser_id});
+        die "Status incorrect ($r[0])" unless $r[0] eq 'A';
+
+        my $rows = $dbh->selectall_arrayref(
+            "SELECT id, f, args FROM call WHERE tx_ser_id=? ORDER BY ctime, id",
+            {}, $tx->{ser_id});
+        for my $call (@$rows) {
+            push @calls, {id=>$call->[0], f=>$call->[1],
+                          args=>$json->decode($call->[2])};
+        }
+
+        $i_call = 0;
+        for $call (@calls) {
+            $i_call++;
+            $log->tracef("[txm] [rollback] Performing call %d/%d: %s(%s) ...",
+                         $i_call, scalar(@calls), $call->{f}, $call->{args});
+            $res = $self->_get_func_and_meta($call->{f});
+            die "Can't get func: $res->[0] - $res->[1]" unless $res->[0] == 200;
+            my ($func, $meta) = @{$res->[2]};
+            # XXX check meta whether func supports undo + transactional?
+            $res = $func->(%{$call->{args}}, -undo_action=>'undo', -tx=>$self);
+            $log->tracef("[txm] [rollback] Call result: %s", $res);
+            die "Call failed: $res->[0] - $res->[1]"
+                unless $res->[0] == 200 || $res->[0] == 304;
+        }
+
+    };
+    my $eval_err = $@;
+    if ($eval_err) {
+        my $now = time();
+        $dbh->do("UPDATE tx SET status='R', mtime=? WHERE ser_id=?", {},
+                 $tx->{ser_id});
+        return join("",
+                    ($i_call ? " call #$i_call/".scalar(@calls).
+                         " (func $call->{f}): " : ""),
+                    $eval_err);
+    }
+
+    return;
+}
+
+# return undef on success, or an error string on failure
+sub _recover {
     my ($self) = @_;
     $log->tracef("[txm] Performing recovery ...");
 
-    # XXX lock database
+    # there should only one recovery or cleanup process running
+    my $res = $self->_lock_db(undef);
+    return $res if $res;
 
-    # XXX find all transaction with status A, u, d. Rollback them.
+    my $dbh = $self->{_dbh};
+    my $rows = $dbh->selectall_arrayref(
+        "SELECT ser_id, status FROM tx WHERE status IN ('A', 'u', 'd') ".
+            "ORDER BY ",
+    );
 
-    # XXX unlock database
+    $self->_unlock_db;
 
     $log->tracef("[txm] Recovery finished");
     return;
+}
+
+# similar to recover, except only rolls back ...?
+sub _cleanup {
 }
 
 # store _tx_id attribute so method calls don't have to specify tx_id. this is
@@ -125,9 +259,13 @@ sub __resp_tx_status {
     [480, "tx #$r->{ser_id}: Incorrect status, status is $ss"];
 }
 
-# all methods have some common code, refactored into _wrap(). arguments:
+# all methods have some common code, e.g. database file locking, starting sqltx,
+# checking Rtx status, etc. hence refactored into _wrap(). arguments:
 #
 # - args* (hashref, arguments to method)
+#
+# - tx_status (str/array, if set then it means method requires Rtx to exist and
+#   have a certain status(es)
 #
 # - code (coderef, main method code, will be passed args as hash)
 #
@@ -137,7 +275,7 @@ sub __resp_tx_status {
 #
 # - rollback_tx_on_code_failure (bool, default 1).
 #
-# wrap() will also put current transaction record to $self->{_cur_tx}
+# wrap() will also put current Rtx record to $self->{_cur_tx}
 sub _wrap {
     my ($self, %wargs) = @_;
     my $margs = $wargs{args}
@@ -146,6 +284,9 @@ sub _wrap {
     $log->tracef("[txm] -> %s(%s)", $caller[3],
                  { map {$_=>$margs->{$_}}
                        grep {!/^-/ && !/^args$/} keys %$margs });
+
+    # so we wait/bail when db is in recovery
+    $self->_lock_db("shared");
 
     my $res;
 
@@ -158,17 +299,26 @@ sub _wrap {
         unless length($tx_id) <= 200;
 
     my $dbh = $self->{_dbh};
+
+    $res = $self->_cleanup;
+    return [500, "Transactions cleanup failed: $res"] if $res;
+
+    # we need to begin sqltx here so that client's actions like rollback() and
+    # commit() are indeed atomic and do not interfere with other clients'.
     $dbh->begin_work or return [532, "txm: Can't begin: ".$dbh->errstr];
-    local $self->{_sqlite_tx} = 1;
+
+    # DBI/DBD::SQLite currently does not support checking whether we are in an
+    # active sqltx, except $dbh->{BegunWork} which is undocumented. we use our
+    # own flag here.
+    local $self->{_in_sqltx} = 1;
 
     my $r = $dbh->selectrow_hashref(
-        "SELECT ser_id, str_id, status FROM tx WHERE str_id=?", {}, $tx_id);
+        "SELECT * FROM tx WHERE str_id=?", {}, $tx_id);
     $self->{_cur_tx} = $r;
 
     if ($wargs{hook_check_args}) {
         $res = $wargs{hook_check_args}->(%$margs);
         if ($res) {
-            $dbh->rollback;
             $self->_rollback;
             return $res;
         }
@@ -205,6 +355,7 @@ sub _wrap {
     }
 
     $dbh->commit or return [532, "Can't commit: ".$dbh->errstr];
+    $self->{_in_sqltx} = 0;
 
     if ($wargs{hook_after_commit}) {
         my $res2 = $wargs{hook_after_tx}->(%$margs);
@@ -267,9 +418,9 @@ sub record_call {
             my $dbh = $self->{_dbh};
             my $f = $args{f} // $caller[3];
             my $now = time();
-            $dbh->do("INSERT INTO call (tx_ser_id, f, args) ".
-                         "VALUES (?,?,?)", {},
-                     $self->{_cur_tx}{ser_id}, $f, $eargs)
+            $dbh->do("INSERT INTO call (tx_ser_id, ctime, f, args) ".
+                         "VALUES (?,?,?,?)", {},
+                     $self->{_cur_tx}{ser_id}, $now, $f, $eargs)
                 or return [532, "SQLite: Can't insert txcall: ".$dbh->errstr];
             return [200, "OK", $dbh->last_insert_id('','','','')];
         },
@@ -345,52 +496,6 @@ sub commit {
     );
 }
 
-sub _get_func_and_meta {
-    my ($self, $func) = @_;
-
-    my ($module, $leaf) = $func =~ /(.+)::(.+)/
-        or return [400, "Not a valid fully qualified function name: $func"];
-    my $res = $self->{pa}->_get_code_and_meta({
-        -module=>$module, -leaf=>$leaf, -type=>'function'});
-    $res;
-}
-
-sub _rollback {
-    my ($self) = @_;
-    my $tx = $self->{_cur_tx};
-    return [500, "BUG: _rollback called without transaction"] unless $tx;
-    $log->tracef("[txm] Rolling back tx #%d (%s) ...",
-                 $tx->{ser_id}, $tx->{str_id});
-    my $dbh = $self->{_dbh};
-
-    my $step_id;
-    eval {
-        my $now = time();
-        $dbh->do("UPDATE tx SET status='R', mtime=? WHERE ser_id=?", {},
-                 $now, $tx->{ser_id})
-            or die "Can't update transaction status: ".$dbh->errstr;
-
-        # we need to commit this first so other clients see it
-        $dbh->commit;
-
-        # XXX get all calls
-        #my @calls;
-        #$dbh->
-
-        # XXX get all steps for all calls
-
-        # XXX perform all the undo steps
-
-    };
-    if ($@) {
-        my $now = time();
-        $dbh->do("UPDATE tx SET status='U', mtime=? WHERE ser_id=?", {},
-                 $tx->{ser_id});
-        return [500, "Rollback failure for tx #$tx->{ser_id}".
-                    ($step_id ? " step #$step_id" : "").": $@"];
-    }
-}
-
 sub rollback {
     my ($self, %args) = @_;
     $self->_wrap(
@@ -441,7 +546,8 @@ sub discard_all {
 
 =head1 DESCRIPTION
 
-This class implements transaction and undo manager (TM). It is meant to be
+This class implements transaction and undo manager (TM), as specified by
+L<Rinci::function::Transaction> and L<Riap::Transaction>. It is meant to be
 instantiated by L<Perinci::Access::InProcess>, but will also be passed to
 transactional functions to save undo/redo data.
 
@@ -457,6 +563,13 @@ require it.
 Create new object. Arguments:
 
 =over 4
+
+=item * pa => OBJ
+
+Perinci::Access::InProcess object. This is required by Perinci::Tx::Manager to
+load/get functions when it wants to perform undo/redo/recovery.
+Perinci::Access::InProcess conveniently require() the Perl modules and wraps the
+functions.
 
 =item * data_dir => STR (default C<~/.perinci/.tx>)
 
@@ -505,13 +618,6 @@ Limit the maximum age of committed transactions (in seconds). If this limit is
 reached, the old transactions will start to be purged.
 
 Not yet implemented.
-
-=item * pa => OBJ
-
-Perinci::Access::InProcess object. This is required by Perinci::Tx::Manager to
-load/get functions when it wants to perform undo/redo/recovery.
-Perinci::Access::InProcess conveniently require() the Perl modules and wraps the
-functions.
 
 =back
 

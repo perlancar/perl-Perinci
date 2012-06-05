@@ -55,9 +55,6 @@ sub _init {
     $self->{_cache} = \%cache;
 
     $self->{use_tx}                //= 0;
-    if ($self->{use_tx}) {
-        require Perinci::Access::InProcess::Tx;
-    }
     $self->{custom_tx_manager}     //= undef;
 
     # other attributes
