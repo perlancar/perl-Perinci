@@ -52,7 +52,6 @@ sub _init {
     my $data_dir = $self->{data_dir};
     $log->tracef("[txm] Initializing data dir %s ...", $data_dir);
 
-    # TMP
     unless (-d "$self->{data_dir}/.trash") {
         mkdir "$self->{data_dir}/.trash"
             or return "Can't create .trash dir: $!";
@@ -107,6 +106,28 @@ _
     $self->{_dbh} = $dbh;
     $log->tracef("[txm] Data dir initialization finished");
     $self->_recover;
+}
+
+sub get_trash_dir {
+    my ($self) = @_;
+    my $tx = $self->{_cur_tx};
+    return [412, "No current transaction, won't create trash dir"] unless $tx;
+    my $d = "$self->{data_dir}/.trash/$tx->{ser_id}";
+    unless (-d $d) {
+        mkdir $d or return [500, "Can't mkdir $d: $!"];
+    }
+    [200, "OK", $d];
+}
+
+sub get_tmp_dir {
+    my ($self) = @_;
+    my $tx = $self->{_cur_tx};
+    return [412, "No current transaction, won't create tmp dir"] unless $tx;
+    my $d = "$self->{data_dir}/.tmp/$tx->{ser_id}";
+    unless (-d $d) {
+        mkdir $d or return [500, "Can't mkdir $d: $!"];
+    }
+    [200, "OK", $d];
 }
 
 sub _lock_db {
@@ -235,6 +256,7 @@ sub _recover {
 
 # similar to recover, except only rolls back ...?
 sub _cleanup {
+    # clean old tx's tmp_dir & trash_dir.
 }
 
 # store _tx_id attribute so method calls don't have to specify tx_id. this is
