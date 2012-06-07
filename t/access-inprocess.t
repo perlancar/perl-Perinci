@@ -111,19 +111,19 @@ test_request(
     name => 'actions on package',
     req => [actions => "/Perinci/Examples/"],
     status => 200,
-    result => [qw/actions begin child_metas commit discard_all_txs discard_tx info list list_txs meta redo release_savepoint rollback savepoint undo/],
+    result => [qw/actions begin_tx child_metas commit_tx discard_all_txs discard_tx info list list_txs meta redo release_tx_savepoint rollback_tx savepoint_tx undo/],
 );
 test_request(
     name => 'actions on function',
     req => [actions => "/Perinci/Examples/gen_array"],
     status => 200,
-    result => [qw/actions begin call commit complete_arg_val discard_all_txs discard_tx info list_txs meta redo release_savepoint rollback savepoint undo/],
+    result => [qw/actions begin_tx call commit_tx complete_arg_val discard_all_txs discard_tx info list_txs meta redo release_tx_savepoint rollback_tx savepoint_tx undo/],
 );
 test_request(
     name => 'actions on variable',
     req => [actions => "/Perinci/Examples/\$Var1"],
     status => 200,
-    result => [qw/actions begin commit discard_all_txs discard_tx get info list_txs meta redo release_savepoint rollback savepoint undo/],
+    result => [qw/actions begin_tx commit_tx discard_all_txs discard_tx get info list_txs meta redo release_tx_savepoint rollback_tx savepoint_tx undo/],
 );
 # XXX actions: detail
 
@@ -298,6 +298,19 @@ test_request(
             or diag explain $res;
     },
 );
+
+# XXX: test tx: begin_tx, commit_tx, rollback_tx
+# XXX: test tx: begin_tx don't give tx_id
+# XXX: test tx: begin_tx gives existing tx_id
+
+# XXX: test tx: call to nonqualifying function (causes rollback)
+# XXX: test tx: automatic rollback on error
+
+# XXX: test tx: test crashes (in txm.t?)
+
+# XXX: test undo, redo func
+# XXX: test list_txs
+# XXX: test discard_tx, discard_all_txs
 
 done_testing();
 

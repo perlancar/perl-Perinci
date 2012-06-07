@@ -350,11 +350,43 @@ sub actionmeta_call { +{
 sub action_call {
     my ($self, $req) = @_;
 
-    my $res = $self->_get_code_and_meta($req);
+    my $tx;
+    my $res;
+    if ($req->{tx_id}) {
+        $res = $self->_pre_tx_action($req);
+        return $res if $res;
+        $tx = $self->{_tx};
+        $tx->_tx_id($req->{tx_id});
+    }
+
+    $res = $self->_get_code_and_meta($req);
     return $res unless $res->[0] == 200;
-    my ($code, undef) = @{$res->[2]};
-    my $args = $req->{args} // {};
-    $code->(%$args);
+    my ($code, $meta) = @{$res->[2]};
+    my %args = %{ $req->{args} // {} };
+
+    if ($tx) {
+        my $f   = $meta->{features} // {};
+        my $ftx = $f->{tx} && ($f->{tx}{use} || $f->{tx}{req});
+
+        # if function features does not qualify in transaction, this constitutes
+        # an error and should cause a rollback
+        unless (
+            ($ftx && $f->{undo} && $f->{idempotent}) ||
+                $f->{pure} ||
+                    ($f->{dry_run} && $args{-dry_run})) {
+            my $rbres = $tx->rollback;
+            return [412, "Can't call this function using transaction".
+                        ($rbres->[0] == 200 ? " (rollbacked)" : "")];
+        }
+        $args{-tx_manager} = $tx;
+        $args{-undo_action} //= 'do' if $ftx;
+    }
+
+    $res = $code->(%args);
+
+    $tx->_tx_id(undef) if $tx;
+
+    $res;
 }
 
 sub actionmeta_complete_arg_val { +{
@@ -489,7 +521,7 @@ sub _pre_tx_action {
             if $@;
     } elsif (!blessed($self->{_tx})) {
         my $txm_cl = $self->{custom_tx_manager} // "Perinci::Tx::Manager";
-        my $txm_cl_p = $txm_cl; $txm_cl_p =~ s!::!/!g; $txm_cl .= ".pm";
+        my $txm_cl_p = $txm_cl; $txm_cl_p =~ s!::!/!g; $txm_cl_p .= ".pm";
         eval {
             require $txm_cl_p;
             $self->{_tx} = $txm_cl->new(pa => $self);
@@ -511,10 +543,13 @@ sub action_begin_tx {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->begin(%$req);
+    $self->{_tx}->begin(
+        tx_id   => $req->{tx_id},
+        summary => $req->{summary},
+    );
 }
 
-sub actionmeta_commit { +{
+sub actionmeta_commit_tx { +{
     applies_to => ['*'],
     summary    => "Commit a transaction",
 } }
@@ -524,7 +559,9 @@ sub action_commit_tx {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->commit(%$req);
+    $self->{_tx}->commit(
+        tx_id  => $req->{tx_id},
+    );
 }
 
 sub actionmeta_savepoint_tx { +{
@@ -537,7 +574,10 @@ sub action_savepoint_tx {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->savepoint(%$req);
+    $self->{_tx}->savepoint(
+        tx_id => $req->{tx_id},
+        sp    => $req->{tx_spid},
+    );
 }
 
 sub actionmeta_release_tx_savepoint { +{
@@ -550,7 +590,10 @@ sub action_release_tx_savepoint {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->release_savepoint(%$req);
+    $self->{_tx}->release_savepoint(
+        tx_id => $req->{tx_id},
+        sp    => $req->{tx_spid},
+    );
 }
 
 sub actionmeta_rollback_tx { +{
@@ -563,7 +606,10 @@ sub action_rollback_tx {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->rollback(%$req);
+    $self->{_tx}->rollback(
+        tx_id => $req->{tx_id},
+        sp    => $req->{tx_spid},
+    );
 }
 
 sub actionmeta_list_txs { +{
@@ -576,7 +622,9 @@ sub action_list_txs {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->list(%$req);
+    $self->{_tx}->list(
+        # XXX select client
+    );
 }
 
 sub actionmeta_undo { +{
@@ -589,7 +637,9 @@ sub action_undo {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->undo(%$req);
+    $self->{_tx}->undo(
+        tx_id => $req->{tx_id},
+    );
 }
 
 sub actionmeta_redo { +{
@@ -602,7 +652,9 @@ sub action_redo {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->redo(%$req);
+    $self->{_tx}->redo(
+        tx_id => $req->{tx_id},
+    );
 }
 
 sub actionmeta_discard_tx { +{
@@ -615,7 +667,9 @@ sub action_discard_tx {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->discard(%$req);
+    $self->{_tx}->discard(
+        tx_id => $req->{tx_id},
+    );
 }
 
 sub actionmeta_discard_all_txs { +{
@@ -628,7 +682,9 @@ sub action_discard_all_txs {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
-    $self->{_tx}->discard_all(%$req);
+    $self->{_tx}->discard_all(
+        # XXX select client
+    );
 }
 
 1;
