@@ -361,11 +361,11 @@ sub _wrap {
     my $dbh = $self->{_dbh};
 
     $res = $self->_cleanup;
-    return [532, "Transactions cleanup failed: $res"] if $res;
+    return [532, "Can't succesfully cleanup: $res"] if $res;
 
     # we need to begin sqltx here so that client's actions like rollback() and
     # commit() are indeed atomic and do not interfere with other clients'.
-    $dbh->begin_work or return [532, "txm: Can't begin: ".$dbh->errstr];
+    $dbh->begin_work or return [532, "db: Can't begin: ".$dbh->errstr];
 
     # DBI/DBD::SQLite currently does not support checking whether we are in an
     # active sqltx, except $dbh->{BegunWork} which is undocumented. we use our
@@ -419,7 +419,7 @@ sub _wrap {
              $self->{_now}, $cur_tx->{ser_id});
     }
 
-    $dbh->commit or return [532, "Can't commit: ".$dbh->errstr];
+    $dbh->commit or return [532, "db: Can't commit: ".$dbh->errstr];
     $self->{_in_sqltx} = 0;
 
     if ($wargs{hook_after_commit}) {
@@ -446,7 +446,7 @@ sub begin {
                          "ctime, mtime) VALUES (?,?,?,?, ?,?)", {},
                      $args{tx_id}, $args{client_token}//"", $args{summary}, "I",
                      $self->{_now}, $self->{_now},
-                 ) or return [532, "Can't insert tx: ".$dbh->errstr];
+                 ) or return [532, "db: Can't insert tx: ".$dbh->errstr];
 
             $self->_tx_id($args{tx_id});
             [200, "OK"];
@@ -484,7 +484,7 @@ sub record_call {
             $dbh->do("INSERT INTO call (tx_ser_id, ctime, f, args) ".
                          "VALUES (?,?,?,?)", {},
                      $self->{_cur_tx}{ser_id}, $self->{_now}, $f, $eargs)
-                or return [532, "SQLite: Can't insert txcall: ".$dbh->errstr];
+                or return [532, "db: Can't insert call: ".$dbh->errstr];
             return [200, "OK", $dbh->last_insert_id('','','','')];
         },
         update_tx_mtime => 1,
@@ -526,7 +526,7 @@ sub _record_step {
 
             $dbh->do("INSERT INTO ${which}_step (ctime, call_id, data) VALUES ".
                          "(?,?,?)", {}, $self->{_now}, $args{call_id}, $data)
-                or return [532, "SQLite: Can't insert step: ".$dbh->errstr];
+                or return [532, "db: Can't insert step: ".$dbh->errstr];
             [200, "OK", $dbh->last_insert_id('','','','')];
         },
         update_tx_mtime => 1,
@@ -548,7 +548,7 @@ sub commit {
             }
             $dbh->do("UPDATE tx SET mtime=?, status=? WHERE ser_id=?",
                      {}, $self->{_now}, "C", $tx->{ser_id})
-                or return [532, "sqlite: Can't update tx status to committed: ".
+                or return [532, "db: Can't update tx status to committed: ".
                                $dbh->errstr];
             [200, "OK"];
         },
