@@ -311,9 +311,8 @@ sub __resp_tx_status {
                     $s eq 'R' ? "already rolled back" :
                         $s eq 'u' ? "undoing" :
                             $s eq 'd' ? "redoing" :
-                                "unknown ('$s'), this is a bug and should ".
-                                    "be reported";
-    [480, "tx #$r->{ser_id}: Incorrect status, status is $ss"];
+                                "unknown";
+    [480, "tx #$r->{ser_id}: Incorrect status, status is $s ($ss)"];
 }
 
 # all methods have some common code, e.g. database file locking, starting sqltx,
