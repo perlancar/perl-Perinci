@@ -165,6 +165,9 @@ sub _get_func_and_meta {
 
     my ($module, $leaf) = $func =~ /(.+)::(.+)/
         or return [400, "Not a valid fully qualified function name: $func"];
+    my $module_p = $module; $module_p =~ s!::!/!g; $module_p .= ".pm";
+    eval { require $module_p }
+        or return [500, "Can't load module $module: $@"];
     my $res = $self->{pa}->_get_code_and_meta({
         -module=>$module, -leaf=>$leaf, -type=>'function'});
     $res;
@@ -174,6 +177,33 @@ sub _rollback_dbh {
     my $self = shift;
     $self->{_dbh}->rollback if $self->{_in_sqltx};
     $self->{_in_sqltx} = 0;
+}
+
+sub _commit_dbh {
+    my $self = shift;
+    return 1 unless $self->{_in_sqltx};
+    my $res = $self->{_dbh}->commit;
+    $self->{_in_sqltx} = 0;
+    $res;
+}
+
+sub get_undo_steps {
+    my ($self, %args) = @_;
+    my $call_id = $args{call_id} or return [400, "Please specify call_id"];
+    my $dbh = $self->{_dbh};
+    my $sth = $dbh->prepare(
+        "SELECT data FROM undo_step WHERE call_id=? ORDER BY ROWID, ctime");
+    $sth->execute($call_id) or return [500, "db: Can't select: ".$dbh->errstr];
+    my @steps;
+    my $i = 0;
+    while (my @row = $sth->fetchrow_array) {
+        $i++;
+        my $step;
+        eval { $step = $json->decode($row[0]) };
+        return [500, "Step #$i is not deserializable from JSON: $@"] if $@;
+        push @steps, $row[0];
+    }
+    [200, "OK", \@steps];
 }
 
 # return undef on success, or an error string on failure
@@ -247,7 +277,7 @@ sub _rollback {
                 unless $res->[0] == 200 || $res->[0] == 304;
         }
         $dbh->do("UPDATE tx SET status='R', mtime=? WHERE ser_id=?", {},
-                 $tx->{ser_id})
+                 $now, $tx->{ser_id})
             or die "sqlite: Can't set tx status to R: ".$dbh->errstr;
 
     };
@@ -425,7 +455,7 @@ sub _wrap {
              $self->{_now}, $cur_tx->{ser_id});
     }
 
-    $dbh->commit or return [532, "db: Can't commit: ".$dbh->errstr];
+    $self->_commit_dbh or return [532, "db: Can't commit: ".$dbh->errstr];
     $self->{_in_sqltx} = 0;
 
     if ($wargs{hook_after_commit}) {
