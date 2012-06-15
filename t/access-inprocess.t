@@ -7,6 +7,11 @@ use Test::More 0.96;
 
 use Perinci::Access::InProcess;
 
+package Foo;
+
+package Bar;
+our $VERSION = 0.123;
+
 package Test::Perinci::Access::InProcess;
 our %SPEC;
 
@@ -91,6 +96,18 @@ test_request(
     result => { summary => "A package",
                 v => 1.1,
                 entity_version => $Test::Perinci::Access::InProcess::VERSION },
+);
+test_request(
+    name => 'meta on package (default meta)',
+    req => [meta => "/Foo/"],
+    status => 200,
+    result => { v => 1.1 },
+);
+test_request(
+    name => 'meta on package (default meta + version)',
+    req => [meta => "/Bar/"],
+    status => 200,
+    result => { v => 1.1, entity_version => 0.123 },
 );
 test_request(
     name => 'ending slash matters',

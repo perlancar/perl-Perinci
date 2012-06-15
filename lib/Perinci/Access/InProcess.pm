@@ -91,6 +91,12 @@ sub _get_code_and_meta {
     my $ma = $res->[2];
 
     my $meta = $ma->get_meta($req);
+
+    # supply a default, empty metadata for package, just so we can put $VERSION
+    # into it
+    if (!$meta && $req->{-type} eq 'package') {
+        $meta = {v=>1.1};
+    }
     return [404, "No metadata"] unless $meta;
 
     my $code;
