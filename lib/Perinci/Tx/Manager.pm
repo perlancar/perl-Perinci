@@ -170,6 +170,12 @@ sub _get_func_and_meta {
     $res;
 }
 
+sub _rollback_dbh {
+    my $self = shift;
+    $self->{_dbh}->rollback if $self->{_in_sqltx};
+    $self->{_in_sqltx} = 0;
+}
+
 # return undef on success, or an error string on failure
 sub _rollback {
     my ($self) = @_;
@@ -189,7 +195,7 @@ sub _rollback {
                  $tx->{ser_id}, $tx->{str_id});
     my $dbh = $self->{_dbh};
 
-    $dbh->rollback if $self->{_in_sqltx};
+    $self->_rollback_dbh;
 
     # we're now in sqlite autocommit mode, we use this mode for the following
     # reasons: 1) after we set Rtx status to 'A', we need other clients to see
@@ -386,7 +392,7 @@ sub _wrap {
 
     if ($wargs{tx_status}) {
         if (!$cur_tx) {
-            $dbh->rollback;
+            $self->_rollback_dbh;
             return [484, "No such transaction"];
         }
         my $ok;
@@ -397,7 +403,7 @@ sub _wrap {
             $ok = $cur_tx->{status} ~~ $wargs{tx_status};
         }
         unless ($ok) {
-            $dbh->rollback if $self->{_in_sqltx};
+            $self->_rollback_dbh;
             return __resp_tx_status($cur_tx);
         }
     }
@@ -406,7 +412,7 @@ sub _wrap {
         $res = $wargs{code}->(%$margs, _tx=>$cur_tx);
         # on error, rollback sqlite tx and skip the rest
         if ($res->[0] >= 400) {
-            $dbh->rollback if $self->{_in_sqltx};
+            $self->_rollback_dbh;
             if ($wargs{rollback_tx_on_code_failure} // 1) {
                 $self->_rollback;
             }
