@@ -415,7 +415,7 @@ if (Test::More->builder->is_passing) {
 sub test_request {
     my %args = @_;
     my $req = $args{req};
-    my $test_name = ($args{name} // "") . " ($req->[0] $req->[1])";
+    my $test_name = ($args{name} // "") . " (req: $req->[0] $req->[1])";
     subtest $test_name => sub {
         my $pa;
         if ($args{object_opts}) {
