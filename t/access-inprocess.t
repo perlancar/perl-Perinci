@@ -5,7 +5,16 @@ use strict;
 use warnings;
 use Test::More 0.96;
 
+use File::chdir;
+use File::Temp qw(tempdir);
 use Perinci::Access::InProcess;
+use Perinci::Tx::Manager;
+use UUID::Random;
+
+sub _uuid { UUID::Random::generate }
+
+my $pa_cached;
+my $pa;
 
 package Foo;
 
@@ -316,27 +325,98 @@ test_request(
     },
 );
 
-# XXX: test tx: begin_tx, commit_tx, rollback_tx
-# XXX: test tx: begin_tx don't give tx_id
-# XXX: test tx: begin_tx gives existing tx_id
+subtest "transaction" => sub {
+    # yeah, symlink() is not really necessary, but at the time of writing this
+    # test script, only Setup::File::Symlink has been converted to use
+    # Riap::Transaction.
+    plan skip_all => "symlink() not available"
+        unless eval { symlink "", ""; 1 };
 
-# XXX: test tx: call to nonqualifying function (causes rollback)
-# XXX: test tx: automatic rollback on error
+    test_request(
+        name => 'must be activated with use_tx',
+        req => [begin_tx=>"/", {tx_id=>_uuid()}],
+        status => 501,
+    );
 
-# XXX: test tx: test crashes (in txm.t?)
+    my $txm;
+    my $tx_id   = _uuid();
+    my $tmp_dir = tempdir(CLEANUP=>1);
+    $CWD = $tmp_dir;
+    my $tx_dir  = "$tmp_dir/.tx";
+    diag "tx dir is $tx_dir";
+    $pa_cached = Perinci::Access::InProcess->new(
+        use_tx=>1,
+        custom_tx_manager => sub {
+            my $self = shift;
+            $txm //= Perinci::Tx::Manager->new(
+                data_dir => $tx_dir, pa => $self);
+            $txm;
+        });
 
-# XXX: test undo, redo func
-# XXX: test list_txs
-# XXX: test discard_tx, discard_all_txs
+    test_request(
+        name => 'begin_tx',
+        req => [begin_tx=>"/", {tx_id=>$tx_id}],
+        status => 200,
+        posttest => sub {
+            my ($res) = @_;
+            my $tres = $txm->list(detail=>1);
+            is($tres->[0], 200, "txm->list() success");
+            is(scalar(@{$tres->[2]}), 1, "There is 1 transaction");
+            is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+        },
+    );
 
+    test_request(
+        name => 'call 1 (failed invocation rolls back tx)',
+        req => [call=>"/Setup/File/Symlink/setup_symlink",
+                {tx_id=>$tx_id, args=>{}}],
+        status => 400,
+        posttest => sub {
+            my ($res) = @_;
+            my $tres = $txm->list(detail=>1, tx_id=>$tx_id);
+            is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
+        },
+    );
+
+    # XXX test: undo_data is hidden
+
+    # XXX test: call to non-qualified function = error
+    # XXX test: call without tx_id is outside of tx
+    # XXX test: two transactions in parallel (one client)
+
+    # XXX: test tx: begin_tx, commit_tx, rollback_tx
+    # XXX: test tx: begin_tx don't give tx_id
+    # XXX: test tx: begin_tx gives existing tx_id
+
+    # XXX: test tx: call to nonqualifying function (causes rollback)
+    # XXX: test tx: automatic rollback on error
+
+    # XXX: test tx: test crashes (in txm.t?)
+
+    # XXX: test undo, redo func
+    # XXX: test list_txs
+    # - detail=0 & 1
+    # - tx_id
+    # - tx_status
+    # XXX: test discard_tx, discard_all_txs
+
+};
+
+
+DONE_TESTING:
 done_testing();
+if (Test::More->builder->is_passing) {
+    #diag "all tests successful, deleting test data dir";
+    $CWD = "/" unless $ENV{NO_CLEANUP};
+} else {
+    diag "there are failing tests, not deleting tx dir";
+}
 
 sub test_request {
     my %args = @_;
     my $req = $args{req};
     my $test_name = ($args{name} // "") . " ($req->[0] $req->[1])";
     subtest $test_name => sub {
-        state $pa_cached;
         my $pa;
         if ($args{object_opts}) {
             $pa = Perinci::Access::InProcess->new(%{$args{object_opts}});

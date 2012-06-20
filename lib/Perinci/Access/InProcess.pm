@@ -382,13 +382,24 @@ sub action_call {
                     ($f->{dry_run} && $args{-dry_run})) {
             my $rbres = $tx->rollback;
             return [412, "Can't call this function using transaction".
-                        ($rbres->[0] == 200 ? " (rollbacked)" : "")];
+                        ($rbres->[0] == 200 ?
+                             " (rollbacked)" : " (rollback failed)")];
         }
         $args{-tx_manager} = $tx;
         $args{-undo_action} //= 'do' if $ftx;
     }
 
     $res = $code->(%args);
+
+    if ($tx) {
+        # if function returns non-success, this also constitutes an error in
+        # transaction and should cause a rollback
+        unless ($res->[0] =~ /^(?:200|304)$/) {
+            my $rbres = $tx->rollback;
+            $res->[1] .= $rbres->[0] == 200 ?
+                " (rollbacked)" : " (rollback failed)";
+        }
+    }
 
     $tx->_tx_id(undef) if $tx;
 

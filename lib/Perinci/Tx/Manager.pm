@@ -33,7 +33,11 @@ sub new {
         unless $opts{pa}->isa("Perinci::Access::InProcess");
 
     my $obj = bless \%opts, $class;
-    if (!$opts{data_dir}) {
+    if ($opts{data_dir}) {
+        unless (-d $opts{data_dir}) {
+            mkdir $opts{data_dir} or return "Can't mkdir $opts{data_dir}: $!";
+        }
+    } else {
         for ("$ENV{HOME}/.perinci", "$ENV{HOME}/.perinci/.tx") {
             unless (-d $_) {
                 mkdir $_ or return "Can't mkdir $_: $!";
@@ -101,7 +105,7 @@ CREATE TABLE IF NOT EXISTS tx (
     status CHAR(1) NOT NULL, -- I, A, C, R, u, d, (E)
     ctime REAL NOT NULL,
     mtime REAL NOT NULL,
-    last_processed_seq INTEGER,
+    last_call_id INTEGER, -- last processed call when rollback/undo/redo
     UNIQUE (str_id)
 )
 _
@@ -246,10 +250,16 @@ sub _rollback {
                                       {}, $tx->{ser_id});
         die "Status incorrect ($r[0])" unless $r[0] eq 'A';
 
+        my $lci = $tx->{last_call_id};
         my $rows = $dbh->selectall_arrayref(
-            "SELECT id, f, args FROM call WHERE tx_ser_id=? ORDER BY ctime, id",
+            "SELECT id, f, args FROM call WHERE tx_ser_id=? ".
+                ($lci ? "AND (id<>$lci AND ".
+                     "ctime >= (SELECT ctime FROM call WHERE id=$lci))" : "").
+                    "ORDER BY ctime, id",
             {}, $tx->{ser_id});
         for (@$rows) {
+            next if $tx->{last_call_id} &&
+                $tx->{last_call_id} == $_->[0] || $_;
             push @calls, {id=>$_->[0], f=>$_->[1],
                           args=>$json->decode($_->[2])};
         }
@@ -275,6 +285,10 @@ sub _rollback {
             $log->tracef("[txm] [rollback] Call result: %s", $res);
             die "Call failed: $res->[0] - $res->[1]"
                 unless $res->[0] == 200 || $res->[0] == 304;
+            # update last_call so we don't have to repeat all calls when we
+            # resume a failed rollback. error can be ignored, i think.
+            $dbh->do("UPDATE tx SET last_call_id=? WHERE ser_id=?", {},
+                     $call->{id}, $tx->{ser_id});
         }
         $dbh->do("UPDATE tx SET status='R', mtime=? WHERE ser_id=?", {},
                  $now, $tx->{ser_id})
@@ -617,6 +631,44 @@ sub release_savepoint {
 }
 
 sub list {
+    my ($self, %args) = @_;
+    $self->_wrap(
+        args => \%args,
+        code => sub {
+            my $dbh = $self->{_dbh};
+            my @wheres = ("1");
+            my @params;
+            if ($args{tx_id}) {
+                push @wheres, "str_id=?";
+                push @params, $args{tx_id};
+            }
+            if ($args{tx_status}) {
+                push @wheres, "status=?";
+                push @params, $args{tx_status};
+            }
+            my $sth = $dbh->prepare(
+                "SELECT * FROM tx WHERE ".join(" AND ", @wheres).
+                    " ORDER BY ctime, ser_id");
+            $sth->execute(@params);
+            my @res;
+            while (my $row = $sth->fetchrow_hashref) {
+                if ($args{detail}) {
+                    push @res, {
+                        tx_id         => $row->{str_id},
+                        tx_status     => $row->{status},
+                        tx_start_time => $row->{ctime},
+                        tx_summary    => $row->{summary},
+                        tx_end_time   => $row->{status} =~ /[CRU]/ ?
+                            $row->{mtime} : undef,
+                    };
+                } else {
+                    push @res, $row->{str_id};
+                }
+            }
+            [200, "OK", \@res];
+        },
+        rollback_tx_on_code_failure => 0,
+    );
 }
 
 sub undo {
