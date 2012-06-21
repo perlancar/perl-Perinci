@@ -508,6 +508,12 @@ subtest "transaction" => sub {
             status => 200,
         );
         test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {args=>{-undo_trash_dir=>"$tmp_dir/.tx/.trash",
+                            symlink=>"$tmp_dir/r1-l3", target=>"t1"}}],
+            status => 200,
+        );
+        test_request(
             req => [rollback_tx=>"/", {tx_id=>"r1"}],
             status => 200,
             posttest => sub {
@@ -517,6 +523,10 @@ subtest "transaction" => sub {
 
                 ok(!(-l "$tmp_dir/r1-l1"), "final state = undone (l1)");
                 ok(!(-l "$tmp_dir/r1-l2"), "final state = undone (l2)");
+
+                # call without tx_id is outside of tx
+                ok((-l "$tmp_dir/r1-l3"),
+                   "final state = done (l3, outside tx)");
             },
         );
     };
@@ -552,10 +562,9 @@ subtest "transaction" => sub {
         );
     };
 
-    # XXX test: call without tx_id is outside of tx
     # XXX test: two transactions in parallel (one client)
 
-    # XXX: test tx: test crashes (in txm.t?)
+    # TODO test crash and recovery
 
     # XXX: test undo, redo func
     # XXX: test list_txs
@@ -564,7 +573,7 @@ subtest "transaction" => sub {
     # - tx_status
     # XXX: test discard_tx, discard_all_txs
 
-};
+}; # transaction subtest
 
 
 DONE_TESTING:
