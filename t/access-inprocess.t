@@ -9,9 +9,6 @@ use File::chdir;
 use File::Temp qw(tempdir);
 use Perinci::Access::InProcess;
 use Perinci::Tx::Manager;
-use UUID::Random;
-
-sub _uuid { UUID::Random::generate }
 
 my $pa_cached;
 my $pa;
@@ -334,12 +331,11 @@ subtest "transaction" => sub {
 
     test_request(
         name => 'must be activated with use_tx',
-        req => [begin_tx=>"/", {tx_id=>_uuid()}],
+        req => [begin_tx=>"/", {tx_id=>"tx1"}],
         status => 501,
     );
 
     my $txm;
-    my $tx_id   = _uuid();
     my $tmp_dir = tempdir(CLEANUP=>1);
     $CWD = $tmp_dir;
     my $tx_dir  = "$tmp_dir/.tx";
@@ -353,30 +349,117 @@ subtest "transaction" => sub {
             $txm;
         });
 
-    test_request(
-        name => 'begin_tx',
-        req => [begin_tx=>"/", {tx_id=>$tx_id}],
-        status => 200,
-        posttest => sub {
-            my ($res) = @_;
-            my $tres = $txm->list(detail=>1);
-            is($tres->[0], 200, "txm->list() success");
-            is(scalar(@{$tres->[2]}), 1, "There is 1 transaction");
-            is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
-        },
-    );
+    subtest 'request to unknown tx = fail' => sub {
+        test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"unknown1",
+                     args=>{symlink=>"$tmp_dir/s1", target=>"t1"}}],
+            status => 484,
+        );
+    };
 
-    test_request(
-        name => 'call 1 (failed invocation rolls back tx)',
-        req => [call=>"/Setup/File/Symlink/setup_symlink",
-                {tx_id=>$tx_id, args=>{}}],
-        status => 400,
-        posttest => sub {
-            my ($res) = @_;
-            my $tres = $txm->list(detail=>1, tx_id=>$tx_id);
-            is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
-        },
-    );
+    subtest 'successful transaction' => sub {
+        test_request(
+            req => [begin_tx=>"/", {tx_id=>"s1"}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1);
+                is($tres->[0], 200, "txm->list() success");
+                is(scalar(@{$tres->[2]}), 1, "There is 1 transaction");
+                is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+            },
+        );
+        test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"s1",
+                     args=>{symlink=>"$tmp_dir/s1-l1", target=>"t1"}}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+            },
+        );
+        test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"s1",
+                     args=>{symlink=>"$tmp_dir/s1-l2", target=>"t1"}}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+            },
+        );
+        test_request(
+            req => [commit_tx=>"/", {tx_id=>"s1"}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
+
+                ok((-l "$tmp_dir/s1-l1"), "final state = done (l1)");
+                ok((-l "$tmp_dir/s1-l2"), "final state = done (l2)");
+            },
+        );
+    };
+    # txs: s1(C)
+
+    subtest 'failed invocation = rolls back' => sub {
+        test_request(
+            req => [begin_tx=>"/", {tx_id=>"f1"}],
+            status => 200,
+        );
+        test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"f1", args=>{}}],
+            status => 400,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"f1");
+                is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
+            },
+        );
+    };
+    # txs: s1(C), f1(R)
+
+    # TODO test: tx with status C cannot be rolled back
+
+    subtest 'rollback' => sub {
+        test_request(
+            req => [begin_tx=>"/", {tx_id=>"r1"}],
+            status => 200,
+        );
+        test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"r1",
+                     args=>{symlink=>"$tmp_dir/r1-l1", target=>"t1"}}],
+            status => 200,
+        );
+        test_request(
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"r1",
+                     args=>{symlink=>"$tmp_dir/r1-l2", target=>"t1"}}],
+            status => 200,
+        );
+        test_request(
+            req => [rollback_tx=>"/", {tx_id=>"r1"}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"r1");
+                is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
+
+                ok(!(-l "$tmp_dir/r1-l1"), "final state = undone (l1)");
+                ok(!(-l "$tmp_dir/r1-l2"), "final state = undone (l2)");
+            },
+        );
+    };
+    # txs: s1(C), f1(R), r1(R)
+
+    # TODO test: tx with status R rolled back again?
 
     # XXX test: undo_data is hidden
 
@@ -384,7 +467,6 @@ subtest "transaction" => sub {
     # XXX test: call without tx_id is outside of tx
     # XXX test: two transactions in parallel (one client)
 
-    # XXX: test tx: begin_tx, commit_tx, rollback_tx
     # XXX: test tx: begin_tx don't give tx_id
     # XXX: test tx: begin_tx gives existing tx_id
 

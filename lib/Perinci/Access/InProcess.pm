@@ -362,7 +362,7 @@ sub action_call {
         $res = $self->_pre_tx_action($req);
         return $res if $res;
         $tx = $self->{_tx};
-        $tx->_tx_id($req->{tx_id});
+        $tx->{_tx_id} = $req->{tx_id};
     }
 
     $res = $self->_get_code_and_meta($req);
@@ -401,7 +401,7 @@ sub action_call {
         }
     }
 
-    $tx->_tx_id(undef) if $tx;
+    $tx->{_tx_id} = undef if $tx;
 
     $res;
 }

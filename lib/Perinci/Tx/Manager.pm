@@ -205,7 +205,7 @@ sub get_undo_steps {
         my $step;
         eval { $step = $json->decode($row[0]) };
         return [500, "Step #$i is not deserializable from JSON: $@"] if $@;
-        push @steps, $row[0];
+        push @steps, $step;
     }
     [200, "OK", \@steps];
 }
@@ -258,11 +258,10 @@ sub _rollback {
                     "ORDER BY ctime, id",
             {}, $tx->{ser_id});
         for (@$rows) {
-            next if $tx->{last_call_id} &&
-                $tx->{last_call_id} == $_->[0] || $_;
             push @calls, {id=>$_->[0], f=>$_->[1],
                           args=>$json->decode($_->[2])};
         }
+        #$log->tracef("[txm] [rollback] Calls to rollback: %s", \@calls);
 
         $i_call = 0;
         for (@calls) {
@@ -344,13 +343,6 @@ sub _cleanup {
     # clean old tx's tmp_dir & trash_dir.
 }
 
-# store _tx_id attribute so method calls don't have to specify tx_id. this is
-# just a convenience.
-sub _tx_id {
-    my ($self, $tx_id) = @_;
-    $self->{_tx_id} = $tx_id;
-}
-
 sub __resp_tx_status {
     my ($r) = @_;
     my $s = $r->{status};
@@ -391,9 +383,11 @@ sub _wrap {
     my $margs = $wargs{args}
         or return [500, "BUG: args not passed to _wrap()"];
     my @caller = caller(1);
-    $log->tracef("[txm] -> %s(%s)", $caller[3],
-                 { map {$_=>$margs->{$_}}
-                       grep {!/^-/ && !/^args$/} keys %$margs });
+    $log->tracef(
+        "[txm] -> %s(%s)",
+        $caller[3],
+        { map {$_=>$margs->{$_}} grep {!/^-/ && !/^args$/} keys %$margs },
+    );
 
     my $res;
 
@@ -405,6 +399,8 @@ sub _wrap {
     # initialize & check tx_id argument
     $margs->{tx_id} //= $self->{_tx_id};
     my $tx_id = $margs->{tx_id};
+    $self->{_tx_id} //= $tx_id;
+
     return [400, "Please specify tx_id"]
         unless defined($tx_id) && length($tx_id);
     return [400, "Invalid tx_id, please use 1-200 characters only"]
@@ -534,7 +530,7 @@ sub begin {
                      $self->{_now}, $self->{_now},
                  ) or return [532, "db: Can't insert tx: ".$dbh->errstr];
 
-            $self->_tx_id($args{tx_id});
+            $self->{_tx_id} = $args{tx_id};
             [200, "OK"];
         },
         rollback_tx_on_code_failure => 0,
@@ -548,7 +544,7 @@ sub record_call {
 
     $self->_wrap(
         args => \%args,
-        tx_status => "I",
+        tx_status => ["I", "A"],
         hook_check_args => sub {
             #return [400, "Please specify f"]         unless $args{f};
             return [400, "Please specify args"]      unless $args{args};
@@ -592,7 +588,7 @@ sub _record_step {
     die "BUG: which must be undo/redo" unless $which =~ /\A(un|re)do\z/;
     my $data;
 
-    $self->_wrap(
+    my $res = $self->_wrap(
         args => \%args,
         hook_check_args => sub {
             $args{call_id} or return [400, "Please specify call_id"];
@@ -602,9 +598,16 @@ sub _record_step {
             $@ and return [400, "step data not serializable to JSON: $@"];
             return;
         },
-        tx_status => "I",
+        tx_status => ["I", "A"],
         code => sub {
             my $dbh = $self->{_dbh};
+
+            # status A is only allowed when we record steps during rollback
+            my $cur_tx = $self->{_cur_tx};
+            if ($cur_tx->{status} eq 'A' && !$self->{_in_rollback}) {
+                $self->_rollback_dbh;
+                return __resp_tx_status($cur_tx);
+            }
 
             my $rc = $dbh->selectrow_hashref(
                 "SELECT id FROM call WHERE id=?", {}, $args{call_id});
@@ -617,6 +620,7 @@ sub _record_step {
         },
         update_tx_mtime => 1,
     );
+    $res;
 }
 
 sub commit {
