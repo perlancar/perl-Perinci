@@ -440,6 +440,56 @@ subtest "transaction" => sub {
     };
     # txs: s1(C), f1(R)
 
+    subtest 'other qualified functions: pure, dry_run' => sub {
+        test_request(
+            req => [begin_tx=>"/", {tx_id=>"s2"}],
+            status => 200,
+        );
+        test_request(
+            name => 'pure',
+            req => [call=>"/Perinci/Examples/noop",
+                    {tx_id=>"f2", args=>{}}],
+            status => 200,
+        );
+        test_request(
+            name => 'dry_run',
+            req => [call=>"/Setup/File/Symlink/setup_symlink",
+                    {tx_id=>"s2",
+                     args=>{symlink=>"$tmp_dir/s2-l1",
+                            target=>"t1", -dry_run=>1}}],
+            status => 200,
+        );
+        test_request(
+            req => [commit_tx=>"/",
+                    {tx_id=>"s2"}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"s2");
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
+            },
+        );
+    };
+    # txs: s1(C), f1(R), s2(C)
+
+    subtest 'invoking unqualified function = rolls back' => sub {
+        test_request(
+            req => [begin_tx=>"/", {tx_id=>"f2"}],
+            status => 200,
+        );
+        test_request(
+            req => [call=>"/Perinci/Examples/delay",
+                    {tx_id=>"f2", args=>{n=>0}}],
+            status => 412,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"f2");
+                is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
+            },
+        );
+    };
+    # txs: s1(C), f1(R), s2(C), f2(R)
+
     subtest 'rollback' => sub {
         test_request(
             req => [begin_tx=>"/", {tx_id=>"r1"}],
@@ -470,7 +520,7 @@ subtest "transaction" => sub {
             },
         );
     };
-    # txs: s1(C), f1(R), r1(R)
+    # txs: s1(C), f1(R), s2(C), f2(R), r1(R)
 
     subtest 'committed transaction cannot be rolled back' => sub {
         test_request(
@@ -502,12 +552,8 @@ subtest "transaction" => sub {
         );
     };
 
-    # XXX test: call to non-qualified function = error
     # XXX test: call without tx_id is outside of tx
     # XXX test: two transactions in parallel (one client)
-
-    # XXX: test tx: call to nonqualifying function (causes rollback)
-    # XXX: test tx: automatic rollback on error
 
     # XXX: test tx: test crashes (in txm.t?)
 
