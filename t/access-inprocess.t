@@ -593,13 +593,15 @@ subtest "transaction" => sub {
         );
     };
 
-    # XXX test: two transactions in parallel (one client)
+    # TODO test two transactions in parallel (one client)
+
+    # TODO test failed rollback (tx status U)
 
     # TODO test crash and recovery
 
-    # XXX: test undo, redo func
+    # TODO test undo & redo
 
-    # XXX: test discard_tx, discard_all_txs
+    # TODO test discard_tx, discard_all_txs
 
 }; # transaction subtest
 

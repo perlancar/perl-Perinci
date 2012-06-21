@@ -1,5 +1,12 @@
 Revision history for Perinci
 
+0.19     2012-06-21 (SHARYANTO) (not yet released)
+
+         - Access::InProcess: Implement transactions (as per Riap::Transaction)
+
+         - Some refactoring
+
+
 0.18     2012-05-02 (SHARYANTO)
 
          No functional changes. Update of Sah schema syntax (Rinci 1.1.15).
