@@ -392,9 +392,12 @@ sub action_call {
     $res = $code->(%args);
 
     if ($tx) {
-        # if function returns non-success, this also constitutes an error in
-        # transaction and should cause a rollback
-        unless ($res->[0] =~ /^(?:200|304)$/) {
+        if ($res->[0] =~ /^(?:200|304)$/) {
+            # suppress undo_data from function, as per Riap::Tx spec
+            delete $res->[3]{undo_data} if $res->[3];
+        } else {
+            # if function returns non-success, this also constitutes an error in
+            # transaction and should cause a rollback
             my $rbres = $tx->rollback;
             $res->[1] .= $rbres->[0] == 200 ?
                 " (rollbacked)" : " (rollback failed)";

@@ -379,6 +379,9 @@ subtest "transaction" => sub {
                 my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
                 is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+
+                ok(!$res->[3]{undo_data},
+                   "undo_data result metadata is suppressed");
             },
         );
         test_request(
