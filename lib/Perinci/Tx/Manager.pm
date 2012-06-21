@@ -365,8 +365,9 @@ sub __resp_tx_status {
     [480, "tx #$r->{ser_id}: Incorrect status, status is $s ($ss)"];
 }
 
-# all methods have some common code, e.g. database file locking, starting sqltx,
-# checking Rtx status, etc. hence refactored into _wrap(). arguments:
+# all methods that work inside a transaction have some common code, e.g.
+# database file locking, starting sqltx, checking Rtx status, etc. hence
+# refactored into _wrap(). arguments:
 #
 # - args* (hashref, arguments to method)
 #
@@ -394,11 +395,12 @@ sub _wrap {
                  { map {$_=>$margs->{$_}}
                        grep {!/^-/ && !/^args$/} keys %$margs });
 
-    # so we wait/bail when db is in recovery
-    $self->_lock_db("shared");
+    my $res;
+
+    $res = $self->_lock_db("shared");
+    return [532, "Can't acquire lock: $res"] if $res;
 
     $self->{_now} = time();
-    my $res;
 
     # initialize & check tx_id argument
     $margs->{tx_id} //= $self->{_tx_id};
@@ -478,6 +480,40 @@ sub _wrap {
     }
 
     return $res;
+}
+
+# all methods that don't work inside a transaction have some common code, e.g.
+# database file locking. arguments:
+#
+# - args* (hashref, arguments to method)
+#
+# - lock_db (bool, default false)
+#
+# - code* (coderef, main method code, will be passed args as hash)
+#
+sub _wrap2 {
+    my ($self, %wargs) = @_;
+    my $margs = $wargs{args}
+        or return [500, "BUG: args not passed to _wrap()"];
+    my @caller = caller(1);
+    $log->tracef("[txm] -> %s(%s)", $caller[3],
+                 { map {$_=>$margs->{$_}}
+                       grep {!/^-/ && !/^args$/} keys %$margs });
+
+    my $res;
+
+    if ($wargs{lock_db}) {
+        $res = $self->_lock_db("shared");
+        return [532, "Can't acquire lock: $res"] if $res;
+    }
+
+    $res = $wargs{code}->(%$margs);
+
+    if ($wargs{lock_db}) {
+        $self->_unlock_db;
+    }
+
+    $res;
 }
 
 sub begin {
@@ -632,7 +668,7 @@ sub release_savepoint {
 
 sub list {
     my ($self, %args) = @_;
-    $self->_wrap(
+    $self->_wrap2(
         args => \%args,
         code => sub {
             my $dbh = $self->{_dbh};
@@ -667,7 +703,6 @@ sub list {
             }
             [200, "OK", \@res];
         },
-        rollback_tx_on_code_failure => 0,
     );
 }
 

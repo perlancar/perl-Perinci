@@ -640,7 +640,9 @@ sub action_list_txs {
     return $res if $res;
 
     $self->{_tx}->list(
-        # XXX select client
+        detail    => $req->{detail},
+        tx_status => $req->{tx_status},
+        tx_id     => $req->{tx_id},
     );
 }
 
