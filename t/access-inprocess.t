@@ -532,6 +532,24 @@ subtest "transaction" => sub {
     };
     # txs: s1(C), f1(R), s2(C), f2(R), r1(R)
 
+    subtest 'list_txs' => sub {
+        test_request(
+            name => 'detail=0',
+            req => [list_txs=>"/", {}],
+            status => 200,
+            posttest => sub {
+                my ($res) = @_;
+                is(scalar(@{$res->[2]}), 5, "num");
+                ok(!ref($res->[2][0]), 5, "no detail");
+            },
+        );
+    };
+    # XXX: test list_txs
+    # - detail=0 & 1
+    # - tx_id
+    # - tx_status
+    # XXX: test discard_tx, discard_all_txs
+
     subtest 'committed transaction cannot be rolled back' => sub {
         test_request(
             req => [rollback_tx=>"/", {tx_id=>"s1"}],
@@ -567,11 +585,6 @@ subtest "transaction" => sub {
     # TODO test crash and recovery
 
     # XXX: test undo, redo func
-    # XXX: test list_txs
-    # - detail=0 & 1
-    # - tx_id
-    # - tx_status
-    # XXX: test discard_tx, discard_all_txs
 
 }; # transaction subtest
 
