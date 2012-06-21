@@ -407,6 +407,18 @@ subtest "transaction" => sub {
     };
     # txs: s1(C)
 
+    subtest 'cannot begin transaction with the same name as existing' => sub {
+        test_request(
+            req => [begin_tx=>"/", {tx_id=>"s1"}],
+            status => 409,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
+            },
+        );
+    };
+
     subtest 'failed invocation = rolls back' => sub {
         test_request(
             req => [begin_tx=>"/", {tx_id=>"f1"}],
@@ -424,8 +436,6 @@ subtest "transaction" => sub {
         );
     };
     # txs: s1(C), f1(R)
-
-    # TODO test: tx with status C cannot be rolled back
 
     subtest 'rollback' => sub {
         test_request(
@@ -459,16 +469,39 @@ subtest "transaction" => sub {
     };
     # txs: s1(C), f1(R), r1(R)
 
-    # TODO test: tx with status R rolled back again?
+    subtest 'committed transaction cannot be rolled back' => sub {
+        test_request(
+            req => [rollback_tx=>"/", {tx_id=>"s1"}],
+            status => 480,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
 
-    # XXX test: undo_data is hidden
+                ok((-l "$tmp_dir/s1-l1"), "final state = done (l1)");
+                ok((-l "$tmp_dir/s1-l2"), "final state = done (l2)");
+            },
+        );
+    };
+
+    subtest 'rolled back transaction cannot be rolled back again' => sub {
+        test_request(
+            req => [rollback_tx=>"/", {tx_id=>"r1"}],
+            status => 480,
+            posttest => sub {
+                my ($res) = @_;
+                my $tres = $txm->list(detail=>1, tx_id=>"r1");
+                is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
+
+                ok(!(-l "$tmp_dir/r1-l1"), "final state = undone (l1)");
+                ok(!(-l "$tmp_dir/r1-l2"), "final state = undone (l2)");
+            },
+        );
+    };
 
     # XXX test: call to non-qualified function = error
     # XXX test: call without tx_id is outside of tx
     # XXX test: two transactions in parallel (one client)
-
-    # XXX: test tx: begin_tx don't give tx_id
-    # XXX: test tx: begin_tx gives existing tx_id
 
     # XXX: test tx: call to nonqualifying function (causes rollback)
     # XXX: test tx: automatic rollback on error
