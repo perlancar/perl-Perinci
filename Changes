@@ -1,5 +1,17 @@
 Revision history for Perinci
 
+0.22     2012-06-22 (SHARYANTO)
+
+         [ENHANCEMENTS]
+
+         - Provide '-undo_trash_dir' for functions that might need it under
+           dry_run (basically, Perinci::CmdLine does not pass tx_id when running
+           dry_run, but functions like setup_symlink() still requires a trash
+           dir to test things under dry_run).
+
+         - Don't show error message for 304 status.
+
+
 0.21     2012-06-22 (SHARYANTO)
 
          [ENHANCEMENTS]
