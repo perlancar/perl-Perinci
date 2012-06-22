@@ -634,7 +634,7 @@ subtest "transaction" => sub {
     };
     # txs: f1(R), s2(C), f2(R), r1(R)
 
-    # TODO cannot discard transactions in states i, R, U, X, ...
+    # TODO cannot discard transactions in states i, ...
 
     subtest 'discard_all_txs' => sub {
         # commit some txs first
@@ -642,14 +642,18 @@ subtest "transaction" => sub {
         test_request(req => [commit_tx=>"/", {tx_id=>"sd1"}], status => 200);
         test_request(req => [begin_tx=>"/" , {tx_id=>"sd2"}], status => 200);
         test_request(req => [commit_tx=>"/", {tx_id=>"sd2"}], status => 200);
+        test_request(req => [undo=>"/"     , {tx_id=>"sd2"}], status => 200);
         test_request(req => [begin_tx=>"/" , {tx_id=>"sd3"}], status => 200);
         test_request(
             req => [commit_tx=>"/", {tx_id=>"sd3"}], status => 200,
             posttest => sub {
                 my $tres = $txm->list(tx_status=>"C");
-                is(scalar(@{$tres->[2]}), 4, "num C = 4");
+                is(scalar(@{$tres->[2]}), 3, "num C = 3");
+                $tres = $txm->list(tx_status=>"U");
+                is(scalar(@{$tres->[2]}), 1, "num U = 1");
             }
         );
+        # TODO test discard transactions in state X
         test_request(
             req => [discard_all_txs=>"/"],
             status => 200,

@@ -823,7 +823,7 @@ sub _discard {
     my ($self, $which, %args) = @_;
     $self->_wrap(
         args => \%args,
-        tx_status => $which eq 'one' ? 'C' : undef,
+        tx_status => $which eq 'one' ? ['C','U','X'] : undef,
         code => sub {
             my $dbh = $self->{_dbh};
             my $sth;
