@@ -356,8 +356,9 @@ sub actionmeta_call { +{
 sub action_call {
     my ($self, $req) = @_;
 
-    my $tx;
     my $res;
+
+    my $tx; # = does client mention tx_id?
     if ($req->{tx_id}) {
         $res = $self->_pre_tx_action($req);
         return $res if $res;
@@ -370,16 +371,28 @@ sub action_call {
     my ($code, $meta) = @{$res->[2]};
     my %args = %{ $req->{args} // {} };
 
+    my $ff  = $meta->{features} // {};
+    my $ftx = $ff->{tx} && ($ff->{tx}{use} || $ff->{tx}{req});
+    my $dry = $ff->{dry_run} && $args{-dry_run};
+
+    # even if client doesn't mention tx_id, some function still needs
+    # -undo_trash_dir under dry_run for testing (e.g. setup_symlink()).
+    if (!$tx && $ftx && $dry && !$args{-undo_trash_dir}) {
+        if ($self->{_tx}) {
+            $args{-undo_trash_dir} = $self->{_tx}->get_trash_dir;
+        } else {
+            $args{-undo_trash_dir} = "/tmp"; # TMP
+        }
+    }
+
     if ($tx) {
-        my $f   = $meta->{features} // {};
-        my $ftx = $f->{tx} && ($f->{tx}{use} || $f->{tx}{req});
 
         # if function features does not qualify in transaction, this constitutes
         # an error and should cause a rollback
         unless (
-            ($ftx && $f->{undo} && $f->{idempotent}) ||
-                $f->{pure} ||
-                    ($f->{dry_run} && $args{-dry_run})) {
+            ($ftx && $ff->{undo} && $ff->{idempotent}) ||
+                $ff->{pure} ||
+                    ($ff->{dry_run} && $args{-dry_run})) {
             my $rbres = $tx->rollback;
             return [412, "Can't call this function using transaction".
                         ($rbres->[0] == 200 ?
