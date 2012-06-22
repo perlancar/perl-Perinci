@@ -1,5 +1,23 @@
 Revision history for Perinci
 
+0.21     2012-06-22 (SHARYANTO)
+
+         [ENHANCEMENTS]
+
+         - txm: redo() and undo() do not require tx_id argument, as per
+           Riap::Transaction spec.
+
+         [INCOMPATIBLE CHANGES]
+
+         - txm: schema change in tx table: mtime -> commit_time.
+
+         [FIXES]
+
+         - txm: get_undo_steps/get_redo_steps: steps need to be reversed.
+
+         - discard() didn't clean call/step entries in database.
+
+
 0.20     2012-06-22 (SHARYANTO)
 
          [FIXES]
