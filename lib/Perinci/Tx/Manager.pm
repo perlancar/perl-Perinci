@@ -359,16 +359,21 @@ sub _rollback_or_undo_or_redo {
 }
 
 # return undef on success, or an error string on failure
-sub _recover {
-    my ($self) = @_;
-    $log->tracef("[txm] Performing recovery ...");
+sub _recover_or_cleanup {
+    my ($self, $which) = @_;
 
-    # there should be only one recovery process running
+    # TODO clean old tx's tmp_dir & trash_dir.
+
+    $log->tracef("[txm] Performing $which ...");
+
+    # there should be only one process running
     my $res = $self->_lock_db(undef);
     return $res if $res;
 
     # rolls back all transactions in a, u, d state
 
+    # XXX when cleanup, also rolls back all i transactions that have been around
+    # for too long
     my $dbh = $self->{_dbh};
     my $sth = $dbh->prepare(
         "SELECT * FROM tx WHERE status IN ('a', 'u', 'd') ".
@@ -383,20 +388,22 @@ sub _recover {
 
     $self->_unlock_db;
 
-    $log->tracef("[txm] Recovery finished");
+    # XXX when cleanup, discard all R Rtxs
+
+    # XXX when cleanup, discard all C, U, X Rtxs that have been around too long
+
+    $log->tracef("[txm] Finished $which");
     return;
 }
 
-sub _cleanup {
-    # TODO lock db exclusively, there should be only one cleanup
-    # TODO clean old tx's tmp_dir & trash_dir.
-    # TODO rolls back all transactions in a, u, d state (like in recovery) + all
-    #   i transactions that have been around too long
-    # TODO delete all txs in R state and X too
+sub _recover {
+    my $self = shift;
+    $self->_recover_or_cleanup('recover');
 }
 
-sub _recovery_or_cleanup {
-    # TODO, move shared code here
+sub _cleanup {
+    my $self = shift;
+    $self->_recover_or_cleanup('cleanup');
 }
 
 sub __resp_tx_status {
