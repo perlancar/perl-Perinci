@@ -125,9 +125,7 @@ test_request(
     name => 'meta on function',
     req => [meta => "/Perinci/Examples/test_completion"],
     status => 200,
-    posttest => sub {
-        my ($res) = @_;
-    },
+    posttest => sub {},
 );
 
 test_request(
@@ -363,7 +361,6 @@ subtest "transaction" => sub {
             req => [begin_tx=>"/", {tx_id=>"s1"}],
             status => 200,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1);
                 is($tres->[0], 200, "txm->list() success");
                 is(scalar(@{$tres->[2]}), 1, "There is 1 transaction");
@@ -390,7 +387,6 @@ subtest "transaction" => sub {
                      args=>{symlink=>"$tmp_dir/s1-l2", target=>"t1"}}],
             status => 200,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
                 is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
             },
@@ -399,12 +395,11 @@ subtest "transaction" => sub {
             req => [commit_tx=>"/", {tx_id=>"s1"}],
             status => 200,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
                 is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
 
-                ok((-l "$tmp_dir/s1-l1"), "final state = done (l1)");
-                ok((-l "$tmp_dir/s1-l2"), "final state = done (l2)");
+                ok((-l "$tmp_dir/s1-l1"), "final state of s1 (l1) = done");
+                ok((-l "$tmp_dir/s1-l2"), "final state of s1 (l2) = done");
             },
         );
     };
@@ -415,7 +410,6 @@ subtest "transaction" => sub {
             req => [begin_tx=>"/", {tx_id=>"s1"}],
             status => 409,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
                 is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
             },
@@ -432,7 +426,6 @@ subtest "transaction" => sub {
                     {tx_id=>"f1", args=>{}}],
             status => 400,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"f1");
                 is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
             },
@@ -464,7 +457,6 @@ subtest "transaction" => sub {
                     {tx_id=>"s2"}],
             status => 200,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s2");
                 is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
             },
@@ -482,7 +474,6 @@ subtest "transaction" => sub {
                     {tx_id=>"f2", args=>{n=>0}}],
             status => 412,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"f2");
                 is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
             },
@@ -517,16 +508,15 @@ subtest "transaction" => sub {
             req => [rollback_tx=>"/", {tx_id=>"r1"}],
             status => 200,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"r1");
                 is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
 
-                ok(!(-l "$tmp_dir/r1-l1"), "final state = undone (l1)");
-                ok(!(-l "$tmp_dir/r1-l2"), "final state = undone (l2)");
+                ok(!(-l "$tmp_dir/r1-l1"), "final state of r1 (l1) = undone");
+                ok(!(-l "$tmp_dir/r1-l2"), "final state of r1 (l2) = undone");
 
                 # call without tx_id is outside of tx
                 ok((-l "$tmp_dir/r1-l3"),
-                   "final state = done (l3, outside tx)");
+                   "final state of r1 (l3) = done (outside tx)");
             },
         );
     };
@@ -568,12 +558,11 @@ subtest "transaction" => sub {
             req => [rollback_tx=>"/", {tx_id=>"s1"}],
             status => 480,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
                 is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
 
-                ok((-l "$tmp_dir/s1-l1"), "final state = done (l1)");
-                ok((-l "$tmp_dir/s1-l2"), "final state = done (l2)");
+                ok((-l "$tmp_dir/s1-l1"), "final state of s1 (l1) = done");
+                ok((-l "$tmp_dir/s1-l2"), "final state of s1 (l2) = done");
             },
         );
     };
@@ -583,25 +572,68 @@ subtest "transaction" => sub {
             req => [rollback_tx=>"/", {tx_id=>"r1"}],
             status => 480,
             posttest => sub {
-                my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"r1");
                 is($tres->[2][0]{tx_status}, "R", "Transaction status is R");
 
-                ok(!(-l "$tmp_dir/r1-l1"), "final state = undone (l1)");
-                ok(!(-l "$tmp_dir/r1-l2"), "final state = undone (l2)");
+                ok(!(-l "$tmp_dir/r1-l1"), "final state of r1 (l1) = undone");
+                ok(!(-l "$tmp_dir/r1-l2"), "final state of r1 (l2) = undone");
             },
         );
     };
+
+    # TODO test undo & redo
+
+    subtest 'discard_tx' => sub {
+        test_request(
+            req => [discard_tx=>"/", {tx_id=>"s1"}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(tx_status=>"C");
+                is(scalar(@{$tres->[2]}), 1, "num C = 1");
+                $tres = $txm->list(tx_id=>"s1");
+                is(scalar(@{$tres->[2]}), 0, "tx s1 is gone");
+
+                # discarding does not effect transaction result
+                ok((-l "$tmp_dir/s1-l1"), "final state of s1 (l1) = done");
+                ok((-l "$tmp_dir/s1-l2"), "final state of s1 (l2) = done");
+            },
+        );
+    };
+    # txs: f1(R), s2(C), f2(R), r1(R)
+
+    subtest 'discard_all_txs' => sub {
+        # commit some txs first
+        test_request(req => [begin_tx=>"/" , {tx_id=>"sd1"}], status => 200);
+        test_request(req => [commit_tx=>"/", {tx_id=>"sd1"}], status => 200);
+        test_request(req => [begin_tx=>"/" , {tx_id=>"sd2"}], status => 200);
+        test_request(req => [commit_tx=>"/", {tx_id=>"sd2"}], status => 200);
+        test_request(req => [begin_tx=>"/" , {tx_id=>"sd3"}], status => 200);
+        test_request(
+            req => [commit_tx=>"/", {tx_id=>"sd3"}], status => 200,
+            posttest => sub {
+                my $tres = $txm->list(tx_status=>"C");
+                is(scalar(@{$tres->[2]}), 4, "num C = 4");
+            }
+        );
+        test_request(
+            req => [discard_all_txs=>"/"],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(tx_status=>"C");
+                is(scalar(@{$tres->[2]}), 0, "num C = 0");
+            },
+        );
+    };
+    # txs: f1(R), f2(R), r1(R)
+
+    # TODO rolled back transaction cannot be discarded (but can be cleaned up)
+    # TODO in-progress transaction cannot be discarded
 
     # TODO test two transactions in parallel (one client)
 
     # TODO test failed rollback (tx status U)
 
     # TODO test crash and recovery
-
-    # TODO test undo & redo
-
-    # TODO test discard_tx, discard_all_txs
 
 }; # transaction subtest
 

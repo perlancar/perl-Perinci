@@ -711,6 +711,46 @@ sub undo {
 sub redo {
 }
 
+sub _discard {
+    my ($self, $which, %args) = @_;
+    $self->_wrap(
+        args => \%args,
+        tx_status => $which eq 'one' ? 'C' : undef,
+        code => sub {
+            my $dbh = $self->{_dbh};
+            my $sth;
+            if ($which eq 'one') {
+                $sth = $dbh->prepare("SELECT ser_id FROM tx WHERE str_id=?");
+                $sth->execute($self->{_cur_tx}{str_id});
+            } else {
+                $sth = $dbh->prepare(
+                    "SELECT ser_id FROM tx WHERE status='C'");
+                $sth->execute;
+            }
+            my @txs;
+            while (my @row = $sth->fetchrow_array) {
+                push @txs, $row[0];
+            }
+            if (@txs) {
+                $dbh->do("DELETE FROM tx WHERE ser_id IN (".join(",", @txs).")")
+                    or return [532, "db: Can't delete tx: ".$dbh->errstr];
+                $log->infof("[txm] discard tx: %s", \@txs);
+            }
+            [200, "OK"];
+        },
+    );
+}
+
+sub discard {
+    my $self = shift;
+    $self->_discard('one', @_);
+}
+
+sub discard_all {
+    my $self = shift;
+    $self->_discard('all', @_);
+}
+
 1;
 # ABSTRACT: Transaction manager
 
