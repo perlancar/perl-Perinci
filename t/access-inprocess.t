@@ -364,7 +364,7 @@ subtest "transaction" => sub {
                 my $tres = $txm->list(detail=>1);
                 is($tres->[0], 200, "txm->list() success");
                 is(scalar(@{$tres->[2]}), 1, "There is 1 transaction");
-                is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+                is($tres->[2][0]{tx_status}, "i", "Transaction status is i");
             },
         );
         test_request(
@@ -375,7 +375,7 @@ subtest "transaction" => sub {
             posttest => sub {
                 my ($res) = @_;
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
-                is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+                is($tres->[2][0]{tx_status}, "i", "Transaction status is i");
 
                 ok(!$res->[3]{undo_data},
                    "undo_data result metadata is suppressed");
@@ -388,7 +388,7 @@ subtest "transaction" => sub {
             status => 200,
             posttest => sub {
                 my $tres = $txm->list(detail=>1, tx_id=>"s1");
-                is($tres->[2][0]{tx_status}, "I", "Transaction status is I");
+                is($tres->[2][0]{tx_status}, "i", "Transaction status is i");
             },
         );
         test_request(

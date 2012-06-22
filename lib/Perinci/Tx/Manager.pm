@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS tx (
     str_id VARCHAR(200) NOT NULL,
     owner_id VARCHAR(64) NOT NULL,
     summary TEXT,
-    status CHAR(1) NOT NULL, -- I, A, C, R, u, d, (E)
+    status CHAR(1) NOT NULL, -- i, a, C, U, R, u, d, X, (e) [uppercase=final]
     ctime REAL NOT NULL,
     mtime REAL NOT NULL,
     last_call_id INTEGER, -- last processed call when rollback/undo/redo
@@ -232,7 +232,7 @@ sub _rollback {
     $self->_rollback_dbh;
 
     # we're now in sqlite autocommit mode, we use this mode for the following
-    # reasons: 1) after we set Rtx status to 'A', we need other clients to see
+    # reasons: 1) after we set Rtx status to 'a', we need other clients to see
     # so they do not try to add steps to it. also after that, each function call
     # will involve record_call() and record_step() that are all separate
     # sqltx's.
@@ -240,15 +240,15 @@ sub _rollback {
     my (@calls, $i_call, $call);
     eval {
         my $now = time();
-        $dbh->do("UPDATE tx SET status='A', mtime=? WHERE ser_id=? ".
-                     "AND status IN ('I')",
+        $dbh->do("UPDATE tx SET status='a', mtime=? WHERE ser_id=? ".
+                     "AND status IN ('i')",
                  {}, $now, $tx->{ser_id})
             or die "sqlite: Can't update tx status: ".$dbh->errstr;
 
         # for safety, check once again if Rtx status is indeed aborted
         my @r = $dbh->selectrow_array("SELECT status FROM tx WHERE ser_id=?",
                                       {}, $tx->{ser_id});
-        die "Status incorrect ($r[0])" unless $r[0] eq 'A';
+        die "Status incorrect ($r[0])" unless $r[0] eq 'a';
 
         my $lci = $tx->{last_call_id};
         my $rows = $dbh->selectall_arrayref(
@@ -297,10 +297,10 @@ sub _rollback {
     my $eval_err = $@;
     if ($eval_err) {
         # if failed during rolling back, we don't know what else to do. we set
-        # Rtx status to U (unknown) and ignore it.
+        # Rtx status to X (inconsistent) and ignore it.
         my $now = time();
-        $dbh->do("UPDATE tx SET status='U', mtime=? ".
-                     "WHERE ser_id=? AND status='A'",
+        $dbh->do("UPDATE tx SET status='X', mtime=? ".
+                     "WHERE ser_id=? AND status='a'",
                  {}, $now, $tx->{ser_id});
         return join("",
                     ($i_call ? "Call #$i_call/".scalar(@calls).
@@ -316,13 +316,15 @@ sub _recover {
     my ($self) = @_;
     $log->tracef("[txm] Performing recovery ...");
 
-    # there should only one recovery or cleanup process running
+    # there should be only one recovery process running
     my $res = $self->_lock_db(undef);
     return $res if $res;
 
+    # rolls back all transactions in a, u, d state
+
     my $dbh = $self->{_dbh};
     my $sth = $dbh->prepare(
-        "SELECT * FROM tx WHERE status IN ('A', 'u', 'd') ".
+        "SELECT * FROM tx WHERE status IN ('a', 'u', 'd') ".
             "ORDER BY ctime DESC",
     );
     $sth->execute or return "sqlite: Can't select tx: ".$dbh->errstr;
@@ -338,22 +340,31 @@ sub _recover {
     return;
 }
 
-# similar to recover, except only rolls back ...?
 sub _cleanup {
-    # clean old tx's tmp_dir & trash_dir.
+    # TODO lock db exclusively, there should be only one cleanup
+    # TODO clean old tx's tmp_dir & trash_dir.
+    # TODO rolls back all transactions in a, u, d state (like in recovery) + all
+    #   i transactions that have been around too long
+    # TODO delete all txs in R state and X too
+}
+
+sub _recovery_or_cleanup {
+    # TODO, move shared code here
 }
 
 sub __resp_tx_status {
     my ($r) = @_;
     my $s = $r->{status};
     my $ss =
-        $s eq 'I' ? "still in-progress" :
-            $s eq 'A' ? "aborted, further requests ignored until rolled back" :
+        $s eq 'i' ? "still in-progress" :
+            $s eq 'a' ? "aborted, further requests ignored until rolled back" :
                 $s eq 'C' ? "already committed" :
                     $s eq 'R' ? "already rolled back" :
-                        $s eq 'u' ? "undoing" :
-                            $s eq 'd' ? "redoing" :
-                                "unknown";
+                        $s eq 'U' ? "already committed+undone" :
+                            $s eq 'u' ? "undoing" :
+                                $s eq 'd' ? "redoing" :
+                                    $s eq 'X' ? "inconsistent" :
+                                        "unknown (bug)";
     [480, "tx #$r->{ser_id}: Incorrect status, status is $s ($ss)"];
 }
 
@@ -406,7 +417,7 @@ sub _wrap {
 
     my $dbh = $self->{_dbh};
 
-    $res = $self->_cleanup;
+    $res = $self->_cleanup; # TODO perhaps don't call every time?
     return [532, "Can't succesfully cleanup: $res"] if $res;
 
     # we need to begin sqltx here so that client's actions like rollback() and
@@ -522,7 +533,7 @@ sub begin {
 
             $dbh->do("INSERT INTO tx (str_id, owner_id, summary, status, ".
                          "ctime, mtime) VALUES (?,?,?,?, ?,?)", {},
-                     $args{tx_id}, $args{client_token}//"", $args{summary}, "I",
+                     $args{tx_id}, $args{client_token}//"", $args{summary}, "i",
                      $self->{_now}, $self->{_now},
                  ) or return [532, "db: Can't insert tx: ".$dbh->errstr];
 
@@ -539,10 +550,17 @@ sub record_call {
 
     $self->_wrap(
         args => \%args,
-        tx_status => ["I", "A"],
+        tx_status => ["i", "a"],
         hook_check_args => sub {
             #return [400, "Please specify f"]         unless $args{f};
             return [400, "Please specify args"]      unless $args{args};
+
+            # status a is only allowed when we record steps during rollback
+            my $cur_tx = $self->{_cur_tx};
+            if ($cur_tx->{status} eq 'a' && !$self->{_in_rollback}) {
+                $self->_rollback_dbh;
+                return __resp_tx_status($cur_tx);
+            }
 
             my $f = $args{f} // $caller[3];
             # strip special arguments
@@ -593,13 +611,13 @@ sub _record_step {
             $@ and return [400, "step data not serializable to JSON: $@"];
             return;
         },
-        tx_status => ["I", "A"],
+        tx_status => ["i", "a"],
         code => sub {
             my $dbh = $self->{_dbh};
 
-            # status A is only allowed when we record steps during rollback
+            # status a is only allowed when we record steps during rollback
             my $cur_tx = $self->{_cur_tx};
-            if ($cur_tx->{status} eq 'A' && !$self->{_in_rollback}) {
+            if ($cur_tx->{status} eq 'a' && !$self->{_in_rollback}) {
                 $self->_rollback_dbh;
                 return __resp_tx_status($cur_tx);
             }
@@ -622,15 +640,19 @@ sub commit {
     my ($self, %args) = @_;
     $self->_wrap(
         args => \%args,
-        tx_status => ["I", "A"],
+        tx_status => ["i", "a"],
         code => sub {
             my $dbh = $self->{_dbh};
             my $tx  = $self->{_cur_tx};
-            if ($tx->{status} eq 'A') {
+            if ($tx->{status} eq 'a') {
                 my $res = $self->_rollback;
                 return $res if $res;
                 return [200, "Rolled back"];
             }
+            $dbh->do("DELETE FROM redo_step WHERE call_id IN ".
+                         "(SELECT id FROM call WHERE tx_ser_id=?)",
+                     {}, $tx->{ser_id})
+                or return [532, "db: Can't empty redo_step: ".$dbh->errstr];
             $dbh->do("UPDATE tx SET mtime=?, status=? WHERE ser_id=?",
                      {}, $self->{_now}, "C", $tx->{ser_id})
                 or return [532, "db: Can't update tx status to committed: ".
@@ -644,7 +666,7 @@ sub rollback {
     my ($self, %args) = @_;
     $self->_wrap(
         args => \%args,
-        tx_status => ["I", "A"],
+        tx_status => ["i", "a"],
         code => sub {
             my $res = $self->_rollback;
             return [532, "Can't rollback: $res"] if $res;
@@ -693,7 +715,7 @@ sub list {
                         tx_status     => $row->{status},
                         tx_start_time => $row->{ctime},
                         tx_summary    => $row->{summary},
-                        tx_end_time   => $row->{status} =~ /[CRU]/ ?
+                        tx_end_time   => $row->{status} =~ /[CRUX]/ ?
                             $row->{mtime} : undef,
                     };
                 } else {
