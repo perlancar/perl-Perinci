@@ -842,8 +842,13 @@ sub _discard {
                 push @txs, $row[0];
             }
             if (@txs) {
-                $dbh->do("DELETE FROM tx WHERE ser_id IN (".join(",", @txs).")")
+                my $txs = join(",", @txs);
+                $dbh->do("DELETE FROM tx WHERE ser_id IN ($txs)")
                     or return [532, "db: Can't delete tx: ".$dbh->errstr];
+                $dbh->do(
+                    "DELETE FROM undo_step WHERE call_id IN ".
+                        "(SELECT id FROM call WHERE tx_ser_id IN ($txs))");
+                $dbh->do("DELETE FROM call WHERE tx_ser_id IN ($txs)");
                 $log->infof("[txm] discard tx: %s", \@txs);
             }
             [200, "OK"];
