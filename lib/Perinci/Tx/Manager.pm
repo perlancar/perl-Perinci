@@ -96,6 +96,7 @@ sub _init {
                            {RaiseError=>0});
 
     # init database
+
     $dbh->do(<<_) or return "Can't init tx db: create tx: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS tx (
     ser_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +110,13 @@ CREATE TABLE IF NOT EXISTS tx (
     UNIQUE (str_id)
 )
 _
+
+    # last_call_id is for the recovery process to avoid repeating all the
+    # function calls when rollback failed in the middle. for example, tx1 has 3
+    # calls c1, c2, c3 and is being rollbacked. txm executes c3, then c2, then
+    # crashes before calling c1. since last_call_id is set to c2, then during
+    # recovery, rollback continues at c1.
+
     $dbh->do(<<_) or return "Can't init tx db: create call: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS call (
     tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
@@ -191,12 +199,13 @@ sub _commit_dbh {
     $res;
 }
 
-sub get_undo_steps {
-    my ($self, %args) = @_;
+sub _get_undo_or_redo_steps {
+    my ($self, $which, %args) = @_;
     my $call_id = $args{call_id} or return [400, "Please specify call_id"];
     my $dbh = $self->{_dbh};
+    my $t = $which eq 'undo' ? 'undo_step' : 'redo_step';
     my $sth = $dbh->prepare(
-        "SELECT data FROM undo_step WHERE call_id=? ORDER BY ROWID, ctime");
+        "SELECT data FROM $t WHERE call_id=? ORDER BY ROWID, ctime");
     $sth->execute($call_id) or return [500, "db: Can't select: ".$dbh->errstr];
     my @steps;
     my $i = 0;
@@ -210,45 +219,64 @@ sub get_undo_steps {
     [200, "OK", \@steps];
 }
 
-# return undef on success, or an error string on failure
-sub _rollback {
-    my ($self) = @_;
+sub get_undo_steps {
+    my $self = shift;
+    $self->_get_undo_or_redo_steps('undo', @_);
+}
 
-    # prevent endless loop, since we call functions when doing rollback, and
-    # functions might call $tx->rollback too upon failure.
-    return if $self->{_in_rollback};
-    local $self->{_in_rollback} = 1;
+sub get_redo_steps {
+    my $self = shift;
+    $self->_get_undo_or_redo_steps('redo', @_);
+}
+
+# return undef on success, or an error string on failure
+sub _rollback_or_undo_or_redo {
+    my ($self, $which) = @_;
+
+    # rollback, undo, and redo share a fair amount of code, mainly looping
+    # through function calls, so we combine them here.
+
+    die "BUG: 'which' must be rollback/undo/redo"
+        unless $which =~ /\A(rollback|undo|redo)\z/;
+
+    # this prevent endless loop in rollback, since we call functions when doing
+    # rollback, and functions might call $tx->rollback too upon failure.
+    return if $self->{_in_rollback} && $which eq 'rollback';
+    local $self->{_in_rollback} = 1 if $which eq 'rollback';
 
     my $tx = $self->{_cur_tx};
     unless ($tx) {
-        $log->warnf("[txm] _rollback() called w/o transaction, probably a bug");
+        $log->warnf("[txm] _$which() called w/o transaction, probably a bug");
         return;
     }
+    $log->tracef("[txm] $which tx #%d (%s) ...", $tx->{ser_id}, $tx->{str_id});
 
-    $log->tracef("[txm] Rolling back tx #%d (%s) ...",
-                 $tx->{ser_id}, $tx->{str_id});
     my $dbh = $self->{_dbh};
 
     $self->_rollback_dbh;
-
     # we're now in sqlite autocommit mode, we use this mode for the following
-    # reasons: 1) after we set Rtx status to 'a', we need other clients to see
-    # so they do not try to add steps to it. also after that, each function call
-    # will involve record_call() and record_step() that are all separate
-    # sqltx's.
+    # reasons: 1) after we set Rtx status to 'a' or 'u' or 'd', we need other
+    # clients to see this, so they do not try to add steps to it. also after
+    # that, each function call will involve record_call() and record_step() that
+    # are all separate sqltx's so each call/step can be recorded permanently in
+    # sqldb.
 
     my (@calls, $i_call, $call);
+    my $os  = $tx->{status};
+    my $ns  = $which eq 'rollback' ? 'a' : $which eq 'undo' ? 'u' : 'd';
+    my $oss = $which eq 'rollback' ? "'i','u','d'" :
+        $which eq 'undo' ? "'C'" : "'U'";
     eval {
         my $now = time();
-        $dbh->do("UPDATE tx SET status='a', mtime=? WHERE ser_id=? ".
-                     "AND status IN ('i')",
+        $dbh->do("UPDATE tx SET status='$ns', mtime=?, last_call_id=NULL ".
+                     "WHERE ser_id=? AND status IN ($oss)",
                  {}, $now, $tx->{ser_id})
-            or die "sqlite: Can't update tx status: ".$dbh->errstr;
+            or die "db: Can't update tx status $oss -> $ns: ".$dbh->errstr;
 
-        # for safety, check once again if Rtx status is indeed aborted
+        # for safety, check once again if Rtx status is indeed updated
         my @r = $dbh->selectrow_array("SELECT status FROM tx WHERE ser_id=?",
                                       {}, $tx->{ser_id});
-        die "Status incorrect ($r[0])" unless $r[0] eq 'a';
+        die "Status incorrect ($r[0])" unless $r[0] eq $ns;
 
         my $lci = $tx->{last_call_id};
         my $rows = $dbh->selectall_arrayref(
@@ -261,13 +289,14 @@ sub _rollback {
             push @calls, {id=>$_->[0], f=>$_->[1],
                           args=>$json->decode($_->[2])};
         }
-        #$log->tracef("[txm] [rollback] Calls to rollback: %s", \@calls);
+        @calls = reverse(@calls) unless $which eq 'redo';
+        #$log->tracef("[txm] [$which] Calls to perform: %s", \@calls);
 
         $i_call = 0;
         for (@calls) {
             $call = $_;
             $i_call++;
-            $log->tracef("[txm] [rollback] Performing call %d/%d: %s(%s) ...",
+            $log->tracef("[txm] [$which] Performing call %d/%d: %s(%s) ...",
                          $i_call, scalar(@calls), $call->{f}, $call->{args});
             my $res = $self->_get_func_and_meta($call->{f});
             die "Can't get func: $res->[0] - $res->[1]" unless $res->[0] == 200;
@@ -275,39 +304,57 @@ sub _rollback {
             # XXX check meta whether func supports undo + transactional?
             $res = $func->(
                 %{$call->{args}},
-                -undo_action=>'undo',
+                -undo_action=>($which eq 'redo' ? 'redo' : 'undo'),
                 -tx_manager=>$self, -tx_call_id=>$call->{id},
                 # the following special arg is just informative, so function
-                # knows and can act more robust if it needs to
-                -tx_action=>'rollback',
+                # knows and can act more robust under rollback if it needs to
+                -tx_action=>($which eq 'rollback' ? 'rollback' : undef),
             );
-            $log->tracef("[txm] [rollback] Call result: %s", $res);
+            $log->tracef("[txm] [$which] Call result: %s", $res);
             die "Call failed: $res->[0] - $res->[1]"
                 unless $res->[0] == 200 || $res->[0] == 304;
+
             # update last_call so we don't have to repeat all calls when we
-            # resume a failed rollback. error can be ignored, i think.
+            # resume a failed rollback. error can be ignored here, i think.
             $dbh->do("UPDATE tx SET last_call_id=? WHERE ser_id=?", {},
-                     $call->{id}, $tx->{ser_id});
+                     $call->{id}, $tx->{ser_id}) if $which eq 'rollback';
         }
-        $dbh->do("UPDATE tx SET status='R', mtime=? WHERE ser_id=?", {},
+        if ($which eq 'undo' || $which eq 'redo') {
+            my $t = $which eq 'undo' ? 'undo_step' : 'redo_step';
+            $dbh->do("DELETE FROM $t WHERE call_id IN ".
+                         "(SELECT id FROM call WHERE tx_ser_id=?)",
+                     {}, $tx->{ser_id})
+                or die "db: Can't empty $t: ".$dbh->errstr;
+        }
+        my $fs = $which eq 'rollback' ? 'R' : $which eq 'undo' ? 'U' : 'C';
+        $dbh->do("UPDATE tx SET status='$fs', mtime=? WHERE ser_id=?", {},
                  $now, $tx->{ser_id})
-            or die "sqlite: Can't set tx status to R: ".$dbh->errstr;
+            or die "db: Can't set tx status to $fs: ".$dbh->errstr;
 
     };
     my $eval_err = $@;
     if ($eval_err) {
-        # if failed during rolling back, we don't know what else to do. we set
-        # Rtx status to X (inconsistent) and ignore it.
-        my $now = time();
-        $dbh->do("UPDATE tx SET status='X', mtime=? ".
-                     "WHERE ser_id=? AND status='a'",
-                 {}, $now, $tx->{ser_id});
-        return join("",
-                    ($i_call ? "Call #$i_call/".scalar(@calls).
-                         " (func $call->{f}): " : ""),
-                    $eval_err);
+        my $errmsg = join("",
+                          ($i_call ? "Call #$i_call/".scalar(@calls).
+                               " (func $call->{f}): " : ""),
+                          $eval_err);
+        if ($which eq 'rollback') {
+            # if failed during rolling back, we don't know what else to do. we
+            # set Rtx status to X (inconsistent) and ignore it.
+            my $now = time();
+            $dbh->do("UPDATE tx SET status='X', mtime=? ".
+                         "WHERE ser_id=? AND status='a'",
+                     {}, $now, $tx->{ser_id});
+            return $errmsg;
+        } else {
+            my $rbres = $self->rollback;
+            if ($rbres->[0] == 200) {
+                return $errmsg." (rolled back)";
+            } else {
+                return $errmsg." (rollback failed: $rbres->[0] - $rbres->[1])";
+            }
+        }
     }
-
     return;
 }
 
@@ -327,7 +374,7 @@ sub _recover {
         "SELECT * FROM tx WHERE status IN ('a', 'u', 'd') ".
             "ORDER BY ctime DESC",
     );
-    $sth->execute or return "sqlite: Can't select tx: ".$dbh->errstr;
+    $sth->execute or return "db: Can't select tx: ".$dbh->errstr;
 
     while (my $row = $sth->fetchrow_hashref) {
         $self->{_cur_tx} = $row;
@@ -372,7 +419,12 @@ sub __resp_tx_status {
 # database file locking, starting sqltx, checking Rtx status, etc. hence
 # refactored into _wrap(). arguments:
 #
+# - label (string, just a label for logging)
+#
 # - args* (hashref, arguments to method)
+#
+# - cleanup (bool, default 0). whether to run cleanup first before code. this is
+#   curently run by begin() only, to make up room by purging old transactions.
 #
 # - tx_status (str/array, if set then it means method requires Rtx to exist and
 #   have a certain status(es)
@@ -393,9 +445,10 @@ sub _wrap {
         or return [500, "BUG: args not passed to _wrap()"];
     my @caller = caller(1);
     $log->tracef(
-        "[txm] -> %s(%s)",
+        "[txm] -> %s(%s) label=%s",
         $caller[3],
         { map {$_=>$margs->{$_}} grep {!/^-/ && !/^args$/} keys %$margs },
+        $wargs{label},
     );
 
     my $res;
@@ -408,7 +461,7 @@ sub _wrap {
     # initialize & check tx_id argument
     $margs->{tx_id} //= $self->{_tx_id};
     my $tx_id = $margs->{tx_id};
-    $self->{_tx_id} //= $tx_id;
+    $self->{_tx_id} = $tx_id;
 
     return [400, "Please specify tx_id"]
         unless defined($tx_id) && length($tx_id);
@@ -417,8 +470,10 @@ sub _wrap {
 
     my $dbh = $self->{_dbh};
 
-    $res = $self->_cleanup; # TODO perhaps don't call every time?
-    return [532, "Can't succesfully cleanup: $res"] if $res;
+    if ($wargs{cleanup}) {
+        $res = $self->_cleanup;
+        return [532, "Can't succesfully cleanup: $res"] if $res;
+    }
 
     # we need to begin sqltx here so that client's actions like rollback() and
     # commit() are indeed atomic and do not interfere with other clients'.
@@ -523,6 +578,7 @@ sub begin {
     my ($self, %args) = @_;
     $self->_wrap(
         args => \%args,
+        cleanup => 1,
         code => sub {
             my $dbh = $self->{_dbh};
             my $r = $dbh->selectrow_hashref("SELECT * FROM tx WHERE str_id=?",
@@ -602,6 +658,7 @@ sub _record_step {
     my $data;
 
     my $res = $self->_wrap(
+        label => $which,
         args => \%args,
         hook_check_args => sub {
             $args{call_id} or return [400, "Please specify call_id"];
@@ -611,7 +668,7 @@ sub _record_step {
             $@ and return [400, "step data not serializable to JSON: $@"];
             return;
         },
-        tx_status => ["i", "a"],
+        tx_status => ["i", "a", "u", "d"],
         code => sub {
             my $dbh = $self->{_dbh};
 
@@ -662,6 +719,11 @@ sub commit {
     );
 }
 
+sub _rollback {
+    my ($self) = @_;
+    $self->_rollback_or_undo_or_redo('rollback');
+}
+
 sub rollback {
     my ($self, %args) = @_;
     $self->_wrap(
@@ -669,8 +731,7 @@ sub rollback {
         tx_status => ["i", "a"],
         code => sub {
             my $res = $self->_rollback;
-            return [532, "Can't rollback: $res"] if $res;
-            [200, "Rolled back"];
+            $res ? [532, $res] : [200, "OK"];
         },
     );
 }
@@ -728,9 +789,27 @@ sub list {
 }
 
 sub undo {
+    my ($self, %args) = @_;
+    $self->_wrap(
+        args => \%args,
+        tx_status => ["C"],
+        code => sub {
+            my $res = $self->_rollback_or_undo_or_redo('undo');
+            $res ? [532, $res] : [200, "OK"];
+        },
+    );
 }
 
 sub redo {
+    my ($self, %args) = @_;
+    $self->_wrap(
+        args => \%args,
+        tx_status => ["U"],
+        code => sub {
+            my $res = $self->_rollback_or_undo_or_redo('redo');
+            $res ? [532, $res] : [200, "OK"];
+        },
+    );
 }
 
 sub _discard {

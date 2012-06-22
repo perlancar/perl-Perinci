@@ -659,6 +659,9 @@ sub action_undo {
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
 
+    # XXX currently not following spec: we require tx_id while spec allows
+    # optional tx_id and defaults to last committed transaction by client
+
     $self->{_tx}->undo(
         tx_id => $req->{tx_id},
     );
@@ -673,6 +676,9 @@ sub action_redo {
     my ($self, $req) = @_;
     my $res = $self->_pre_tx_action($req);
     return $res if $res;
+
+    # XXX currently not following spec: we require tx_id while spec allows
+    # optional tx_id and defaults to last undone committed transaction by client
 
     $self->{_tx}->redo(
         tx_id => $req->{tx_id},

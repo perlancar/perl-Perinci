@@ -553,7 +553,7 @@ subtest "transaction" => sub {
         );
     };
 
-    subtest 'committed transaction cannot be rolled back' => sub {
+    subtest 'cannot rollback transactions with status C' => sub {
         test_request(
             req => [rollback_tx=>"/", {tx_id=>"s1"}],
             status => 480,
@@ -566,8 +566,7 @@ subtest "transaction" => sub {
             },
         );
     };
-
-    subtest 'rolled back transaction cannot be rolled back again' => sub {
+    subtest 'cannot rollback transactions with status R' => sub {
         test_request(
             req => [rollback_tx=>"/", {tx_id=>"r1"}],
             status => 480,
@@ -581,7 +580,41 @@ subtest "transaction" => sub {
         );
     };
 
-    # TODO test undo & redo
+    # TODO cannot rollback transactions with status U, X
+
+    subtest 'undo' => sub {
+        test_request(
+            req => [undo=>"/", {tx_id=>"s1"}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "U", "Transaction status is U");
+
+                ok(!(-l "$tmp_dir/s1-l1"), "final state of s1 (l1) = undone");
+                ok(!(-l "$tmp_dir/s1-l2"), "final state of s1 (l2) = undone");
+            },
+        );
+    };
+    # txs: s1(U), f1(R), s2(C), f2(R), r1(R)
+
+    # TODO cannot undo transactions in states i, U, X, R, ...
+
+    subtest 'redo' => sub {
+        test_request(
+            req => [redo=>"/", {tx_id=>"s1"}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(detail=>1, tx_id=>"s1");
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
+
+                ok((-l "$tmp_dir/s1-l1"), "final state of s1 (l1) = done");
+                ok((-l "$tmp_dir/s1-l2"), "final state of s1 (l2) = done");
+            },
+        );
+    };
+    # txs: s1(C), f1(R), s2(C), f2(R), r1(R)
+
+    # TODO cannot redo transactions in states i, C, X, R, ...
 
     subtest 'discard_tx' => sub {
         test_request(
@@ -600,6 +633,8 @@ subtest "transaction" => sub {
         );
     };
     # txs: f1(R), s2(C), f2(R), r1(R)
+
+    # TODO cannot discard transactions in states i, R, U, X, ...
 
     subtest 'discard_all_txs' => sub {
         # commit some txs first
@@ -626,14 +661,18 @@ subtest "transaction" => sub {
     };
     # txs: f1(R), f2(R), r1(R)
 
-    # TODO rolled back transaction cannot be discarded (but can be cleaned up)
     # TODO in-progress transaction cannot be discarded
 
     # TODO test two transactions in parallel (one client)
 
-    # TODO test failed rollback (tx status U)
+    # TODO test failed rollback (tx status becomes X)
+    # TODO test failed rollback (tx status becomes X)
+    # TODO test failed rollback (tx status becomes X)
 
-    # TODO test crash and recovery
+    # TODO test crash during calls and recovery
+    # TODO test crash during undoing and recovery
+    # TODO test crash during redoing and recovery
+    # TODO test crash during rollback and recovery
 
 }; # transaction subtest
 
