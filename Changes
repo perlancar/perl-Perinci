@@ -1,5 +1,15 @@
 Revision history for Perinci
 
+0.20     2012-06-22 (SHARYANTO)
+
+         [FIXES]
+
+         - txm: discard_all() should not require tx_id
+
+         - discard() and discard_all() can discard transactions in states U/X
+           too
+
+
 0.19     2012-06-22 (SHARYANTO)
 
          - Access::InProcess: Implement transactions (as per Riap::Transaction)
