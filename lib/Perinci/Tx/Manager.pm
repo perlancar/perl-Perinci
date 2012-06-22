@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS tx (
     summary TEXT,
     status CHAR(1) NOT NULL, -- i, a, C, U, R, u, d, X, (e) [uppercase=final]
     ctime REAL NOT NULL,
-    mtime REAL NOT NULL,
+    commit_time REAL,
     last_call_id INTEGER, -- last processed call when rollback/undo/redo
     UNIQUE (str_id)
 )
@@ -205,7 +205,7 @@ sub _get_undo_or_redo_steps {
     my $dbh = $self->{_dbh};
     my $t = $which eq 'undo' ? 'undo_step' : 'redo_step';
     my $sth = $dbh->prepare(
-        "SELECT data FROM $t WHERE call_id=? ORDER BY ROWID, ctime");
+        "SELECT data FROM $t WHERE call_id=? ORDER BY ctime, ROWID");
     $sth->execute($call_id) or return [500, "db: Can't select: ".$dbh->errstr];
     my @steps;
     my $i = 0;
@@ -268,10 +268,9 @@ sub _rollback_or_undo_or_redo {
     my $oss = $which eq 'rollback' ? "'i','u','d'" :
         $which eq 'undo' ? "'C'" : "'U'";
     eval {
-        my $now = time();
-        $dbh->do("UPDATE tx SET status='$ns', mtime=?, last_call_id=NULL ".
+        $dbh->do("UPDATE tx SET status='$ns', last_call_id=NULL ".
                      "WHERE ser_id=? AND status IN ($oss)",
-                 {}, $now, $tx->{ser_id})
+                 {}, $tx->{ser_id})
             or die "db: Can't update tx status $oss -> $ns: ".$dbh->errstr;
 
         # for safety, check once again if Rtx status is indeed updated
@@ -328,8 +327,7 @@ sub _rollback_or_undo_or_redo {
                 or die "db: Can't empty $t: ".$dbh->errstr;
         }
         my $fs = $which eq 'rollback' ? 'R' : $which eq 'undo' ? 'U' : 'C';
-        $dbh->do("UPDATE tx SET status='$fs', mtime=? WHERE ser_id=?", {},
-                 $now, $tx->{ser_id})
+        $dbh->do("UPDATE tx SET status='$fs' WHERE ser_id=?", {}, $tx->{ser_id})
             or die "db: Can't set tx status to $fs: ".$dbh->errstr;
 
     };
@@ -342,10 +340,9 @@ sub _rollback_or_undo_or_redo {
         if ($which eq 'rollback') {
             # if failed during rolling back, we don't know what else to do. we
             # set Rtx status to X (inconsistent) and ignore it.
-            my $now = time();
-            $dbh->do("UPDATE tx SET status='X', mtime=? ".
+            $dbh->do("UPDATE tx SET status='X' ".
                          "WHERE ser_id=? AND status='a'",
-                     {}, $now, $tx->{ser_id});
+                     {}, $tx->{ser_id});
             return $errmsg;
         } else {
             my $rbres = $self->rollback;
@@ -443,9 +440,6 @@ sub __resp_tx_status {
 #
 # - hook_after_commit (coderef, will be passed args as hash).
 #
-# - update_tx_mtime (bool, whether to update tx mtime on success of code,
-#   default 0).
-#
 # wrap() will also put current Rtx record to $self->{_cur_tx}
 sub _wrap {
     my ($self, %wargs) = @_;
@@ -532,11 +526,6 @@ sub _wrap {
         }
     }
 
-    if ($wargs{update_tx_mtime}) {
-        $dbh->do("UPDATE tx SET mtime=? WHERE ser_id=?", {},
-             $self->{_now}, $cur_tx->{ser_id});
-    }
-
     $self->_commit_dbh or return [532, "db: Can't commit: ".$dbh->errstr];
     $self->{_in_sqltx} = 0;
 
@@ -596,9 +585,9 @@ sub begin {
             # XXX check for limits
 
             $dbh->do("INSERT INTO tx (str_id, owner_id, summary, status, ".
-                         "ctime, mtime) VALUES (?,?,?,?, ?,?)", {},
+                         "ctime) VALUES (?,?,?,?,?)", {},
                      $args{tx_id}, $args{client_token}//"", $args{summary}, "i",
-                     $self->{_now}, $self->{_now},
+                     $self->{_now},
                  ) or return [532, "db: Can't insert tx: ".$dbh->errstr];
 
             $self->{_tx_id} = $args{tx_id};
@@ -646,7 +635,6 @@ sub record_call {
                 or return [532, "db: Can't insert call: ".$dbh->errstr];
             return [200, "OK", $dbh->last_insert_id('','','','')];
         },
-        update_tx_mtime => 1,
     );
 }
 
@@ -696,7 +684,6 @@ sub _record_step {
                 or return [532, "db: Can't insert step: ".$dbh->errstr];
             [200, "OK", $dbh->last_insert_id('','','','')];
         },
-        update_tx_mtime => 1,
     );
     $res;
 }
@@ -718,8 +705,8 @@ sub commit {
                          "(SELECT id FROM call WHERE tx_ser_id=?)",
                      {}, $tx->{ser_id})
                 or return [532, "db: Can't empty redo_step: ".$dbh->errstr];
-            $dbh->do("UPDATE tx SET mtime=?, status=? WHERE ser_id=?",
-                     {}, $self->{_now}, "C", $tx->{ser_id})
+            $dbh->do("UPDATE tx SET status=?, commit_time=? WHERE ser_id=?",
+                     {}, "C", $self->{_now}, $tx->{ser_id})
                 or return [532, "db: Can't update tx status to committed: ".
                                $dbh->errstr];
             [200, "OK"];
@@ -783,9 +770,8 @@ sub list {
                         tx_id         => $row->{str_id},
                         tx_status     => $row->{status},
                         tx_start_time => $row->{ctime},
+                        tx_commit_time=> $row->{commit_time},
                         tx_summary    => $row->{summary},
-                        tx_end_time   => $row->{status} =~ /[CRUX]/ ?
-                            $row->{mtime} : undef,
                     };
                 } else {
                     push @res, $row->{str_id};
@@ -798,6 +784,17 @@ sub list {
 
 sub undo {
     my ($self, %args) = @_;
+
+    # find latest committed tx
+    unless ($args{tx_id}) {
+        my $dbh = $self->{_dbh};
+        my @row = $dbh->selectrow_array(
+            "SELECT str_id FROM tx WHERE status='C' ".
+                "ORDER BY commit_time DESC, ser_id DESC LIMIT 1");
+        return [412, "There are no committed transactions to undo"] unless @row;
+        $args{tx_id} = $row[0];
+    }
+
     $self->_wrap(
         args => \%args,
         tx_status => ["C"],
@@ -810,6 +807,17 @@ sub undo {
 
 sub redo {
     my ($self, %args) = @_;
+
+    # find first undone committed tx
+    unless ($args{tx_id}) {
+        my $dbh = $self->{_dbh};
+        my @row = $dbh->selectrow_array(
+            "SELECT str_id FROM tx WHERE status='U' ".
+                "ORDER BY commit_time ASC, ser_id ASC LIMIT 1");
+        return [412, "There are no undone transactions to redo"] unless @row;
+        $args{tx_id} = $row[0];
+    }
+
     $self->_wrap(
         args => \%args,
         tx_status => ["U"],
