@@ -832,7 +832,7 @@ sub _discard {
                 $sth->execute($self->{_cur_tx}{str_id});
             } else {
                 $sth = $dbh->prepare(
-                    "SELECT ser_id FROM tx WHERE status='C'");
+                    "SELECT ser_id FROM tx WHERE status IN ('C','U','X')");
                 $sth->execute;
             }
             my @txs;

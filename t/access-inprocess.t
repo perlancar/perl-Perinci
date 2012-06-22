@@ -660,6 +660,8 @@ subtest "transaction" => sub {
             posttest => sub {
                 my $tres = $txm->list(tx_status=>"C");
                 is(scalar(@{$tres->[2]}), 0, "num C = 0");
+                $tres = $txm->list(tx_status=>"U");
+                is(scalar(@{$tres->[2]}), 0, "num U = 0");
             },
         );
     };
