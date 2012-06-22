@@ -821,7 +821,9 @@ sub redo {
 
 sub _discard {
     my ($self, $which, %args) = @_;
-    $self->_wrap(
+    my $wmeth = $which eq 'one' ? '_wrap' : '_wrap2';
+    $self->$wmeth(
+        label => $which,
         args => \%args,
         tx_status => $which eq 'one' ? ['C','U','X'] : undef,
         code => sub {
