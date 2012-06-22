@@ -12,7 +12,7 @@ use warnings;
 my $format_text = sub {
     my ($format, $res) = @_;
     if (!defined($res->[2])) {
-        return $res->[0] == 200 ? "" :
+        return $res->[0] =~ /\A(?:200|304)\z/ ? "" :
             "ERROR $res->[0]: $res->[1]" .
                 ($res->[1] =~ /\n\z/ ? "" : "\n");
     }
