@@ -379,7 +379,8 @@ sub action_call {
     # -undo_trash_dir under dry_run for testing (e.g. setup_symlink()).
     if (!$tx && $ftx && $dry && !$args{-undo_trash_dir}) {
         if ($self->{_tx}) {
-            $args{-undo_trash_dir} = $self->{_tx}->get_trash_dir;
+            $res = $self->{_tx}->get_trash_dir;
+            $args{-undo_trash_dir} = $res->[2]; # XXX if error?
         } else {
             $args{-undo_trash_dir} = "/tmp"; # TMP
         }
