@@ -1015,6 +1015,10 @@ Will return (in enveloped response) an array of redo steps, e.g. [200, "OK",
 
 Arguments: tx_id, call_id.
 
+=head2 $tx->get_trash_dir => RESP
+
+=head2 $tx->get_tmp_dir => RESP
+
 =head2 $tx->commit(%args) => RESP
 
 Arguments: tx_id
