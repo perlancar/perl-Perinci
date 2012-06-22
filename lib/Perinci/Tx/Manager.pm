@@ -216,6 +216,7 @@ sub _get_undo_or_redo_steps {
         return [500, "Step #$i is not deserializable from JSON: $@"] if $@;
         push @steps, $step;
     }
+    @steps = reverse(@steps) if $which eq 'undo';
     [200, "OK", \@steps];
 }
 
