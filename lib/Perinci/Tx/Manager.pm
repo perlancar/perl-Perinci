@@ -620,7 +620,7 @@ sub record_call {
 
             # status a is only allowed when we record steps during rollback
             my $cur_tx = $self->{_cur_tx};
-            if ($cur_tx->{status} eq 'a' && !$self->{_in_rollback}) {
+            if ($cur_tx && $cur_tx->{status} eq 'a' && !$self->{_in_rollback}) {
                 $self->_rollback_dbh;
                 return __resp_tx_status($cur_tx);
             }
