@@ -372,8 +372,6 @@ sub __resp_tx_status {
 #
 # - hook_after_commit (coderef, will be passed args as hash).
 #
-# - rollback_tx_on_code_failure (bool, default 1).
-#
 # - update_tx_mtime (bool, whether to update tx mtime on success of code,
 #   default 0).
 #
@@ -455,9 +453,7 @@ sub _wrap {
         # on error, rollback sqlite tx and skip the rest
         if ($res->[0] >= 400) {
             $self->_rollback_dbh;
-            if ($wargs{rollback_tx_on_code_failure} // 1) {
-                $self->_rollback;
-            }
+            $self->_rollback;
             return $res;
         }
     }
@@ -533,7 +529,6 @@ sub begin {
             $self->{_tx_id} = $args{tx_id};
             [200, "OK"];
         },
-        rollback_tx_on_code_failure => 0,
     );
 }
 
@@ -714,12 +709,6 @@ sub undo {
 }
 
 sub redo {
-}
-
-sub discard {
-}
-
-sub discard_all {
 }
 
 1;
