@@ -28,6 +28,8 @@ sub new {
 sub _normalize_uri {
     my ($self, $uri) = @_;
 
+    $uri //= "";
+
     return $uri if blessed($uri);
     if ($uri =~ /^\w+(::\w+)+$/) {
         # assume X::Y is a module name
