@@ -1,6 +1,6 @@
 Revision history for Perinci
 
-0.19     2012-06-21 (SHARYANTO) (not yet released)
+0.19     2012-06-22 (SHARYANTO)
 
          - Access::InProcess: Implement transactions (as per Riap::Transaction)
 
