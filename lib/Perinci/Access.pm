@@ -8,6 +8,9 @@ use Log::Any '$log';
 use Scalar::Util qw(blessed);
 use URI;
 
+our $Log_Requests  = 1;
+our $Log_Responses = 1;
+
 # VERSION
 
 sub new {
@@ -77,7 +80,16 @@ sub request {
         }
     }
 
-    $self->{_handler_objs}{$sch}->request($action, $uri, $extra);
+    if ($Log_Requests && $log->is_trace) {
+        $log->tracef(
+            "Riap request (%s): %s -> %s (%s)",
+            class($self->{_handler_objs}{$sch}), $action, $uri, $extra);
+    }
+    my $res = $self->{_handler_objs}{$sch}->request($action, $uri, $extra);
+    if ($Log_Responses && $log->is_trace) {
+        $log->tracef("Riap response: %s", $res);
+    }
+    $res;
 }
 
 1;
@@ -121,6 +133,19 @@ This module provides a convenient wrapper to select appropriate Riap client
 
 You can customize or add supported schemes by providing class name or object to
 the B<handlers> attribute (see its documentation for more details).
+
+
+=head1 VARIABLES
+
+=head2 $Log_Requests (BOOL, default 1)
+
+Whether to log every Riap request. Logging is done with L<Log::Any> at trace
+level.
+
+=head2 $Log_Responses (BOOL, default 1)
+
+Whether to log every Riap response. Logging is done with L<Log::Any> at trace
+level.
 
 
 =head1 METHODS
