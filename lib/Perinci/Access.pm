@@ -8,8 +8,8 @@ use Log::Any '$log';
 use Scalar::Util qw(blessed);
 use URI;
 
-our $Log_Requests  = 1;
-our $Log_Responses = 1;
+our $Log_Requests  = $ENV{LOG_RIAP_REQUESTS}  // 0;
+our $Log_Responses = $ENV{LOG_RIAP_RESPONSES} // 0;
 
 # VERSION
 
@@ -137,15 +137,15 @@ the B<handlers> attribute (see its documentation for more details).
 
 =head1 VARIABLES
 
-=head2 $Log_Requests (BOOL, default 1)
+=head2 $Log_Requests (BOOL)
 
-Whether to log every Riap request. Logging is done with L<Log::Any> at trace
-level.
+Whether to log every Riap request. Default is from environment variable
+LOG_RIAP_REQUESTS, or false. Logging is done with L<Log::Any> at trace level.
 
-=head2 $Log_Responses (BOOL, default 1)
+=head2 $Log_Responses (BOOL)
 
-Whether to log every Riap response. Logging is done with L<Log::Any> at trace
-level.
+Whether to log every Riap response. Default is from environment variable
+LOG_RIAP_RESPONSES, or false. Logging is done with L<Log::Any> at trace level.
 
 
 =head1 METHODS
