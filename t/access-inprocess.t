@@ -9,6 +9,7 @@ use File::chdir;
 use File::Temp qw(tempdir);
 use Perinci::Access::InProcess;
 use Perinci::Tx::Manager;
+use Scalar::Util qw(blessed);
 
 my $pa_cached;
 my $pa;
@@ -344,6 +345,7 @@ subtest "transaction" => sub {
             my $self = shift;
             $txm //= Perinci::Tx::Manager->new(
                 data_dir => $tx_dir, pa => $self);
+            die $txm unless blessed($txm);
             $txm;
         });
 
