@@ -104,6 +104,3 @@ detail. It can also be an abbreviation for "B<Pe>rl implementation of B<Rinci>".
 L<Rinci>
 
 =cut
-
-
-
