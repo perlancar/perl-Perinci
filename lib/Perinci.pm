@@ -5,6 +5,17 @@ package Perinci;
 1;
 # ABSTRACT: Collection of Perl modules for Rinci and Riap
 
+=head1 SYNOPSIS
+
+ use Perinci::Easy qw(defsub);
+
+ # define a subroutine
+ defsub name=>'foo', summary=>'Blah ...',
+     code=>sub {
+         ...
+     };
+
+
 =head1 STATUS
 
 Some modules have been implemented, some (including important ones) have not.
