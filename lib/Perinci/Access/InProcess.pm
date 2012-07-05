@@ -74,7 +74,23 @@ sub _get_meta_accessor {
     $ma_p =~ s!::!/!g;
     $ma_p .= ".pm";
     eval { require $ma_p };
-    return [500, "Can't load meta accessor module $ma"] if $@;
+    my $req_err = $@;
+    if ($req_err) {
+        if (!package_exists($ma)) {
+            return [500, "Can't load meta accessor module $ma (probably ".
+                        "mistyped or missing module): $req_err"];
+        } elsif ($req_err !~ m!Can't locate!) {
+            return [500, "Can't load meta accessor module $ma (probably ".
+                        "compile error): $req_err"];
+        }
+        # require error of "Can't locate ..." can be ignored. it
+        # might mean package is already defined by other code. we'll
+        # try and access it anyway.
+    } elsif (!package_exists($ma)) {
+        # shouldn't happen
+        return [500, "Meta accessor module loaded OK, but no $ma package ".
+                    "found, something's wrong"];
+    }
     [200, "OK", $ma];
 }
 
