@@ -724,13 +724,6 @@ sub action_discard_all_txs {
 }
 
 1;
-# ABSTRACT: Handle transaction-/undo-related Riap requests
-
-=head1 SEE ALSO
-
-The default implementation of transaction manager: L<Perinci::Tx::Manager>
-
-1;
 # ABSTRACT: Use Rinci access protocol (Riap) to access Perl code
 
 =for Pod::Coverage ^actionmeta_.+ ^action_.+
