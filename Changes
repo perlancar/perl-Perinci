@@ -9,8 +9,6 @@ Revision history for Perinci
          - Log Riap requests and responses (controlled by $Log_Requests and
            $Log_Responses, default off)
 
-         - Don't show error message for 304 status.
-
 
 0.22     2012-06-22 (SHARYANTO)
 
