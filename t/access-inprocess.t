@@ -351,23 +351,38 @@ test_request(
 
 subtest "custom meta accessor" => sub {
     test_request(
+        name => 'via $PERINCI_META_ACCESSOR #1',
         req => [meta => "/Test/CustomMetaAccessor/f1"],
         status => 200,
         result => { v => 1.1, summary => 'foo',
                     args_as=>'hash', result_naked=>0 },
     );
     test_request(
+        name => 'via $PERINCI_META_ACCESSOR #2',
         req => [meta => "/Test/CustomMetaAccessor/f2"],
         status => 200,
         result => { v => 1.1, summary => 'bar',
                     args_as=>'hash', result_naked=>0 },
     );
 
+    undef $Test::CustomMetaAccessor::PERINCI_META_ACCESSOR;
     test_request(
-        req => [call => "/Test/CustomMetaAccessor/f2"],
-        status => 200,
-        result => 2,
+        name => 'no $PERINCI_META_ACCESSOR',
+        object_opts=>{}, # defeat caching of metadata
+        req => [meta => "/Test/CustomMetaAccessor/f1"],
+        status => 404,
     );
+
+    test_request(
+        name => 'via meta_accessor in constructor',
+        object_opts=>{meta_accessor=>"MyMetaAccessor"},
+        req => [meta => "/Test/CustomMetaAccessor/f1"],
+        status => 200,
+        result => { v => 1.1, summary => 'foo',
+                    args_as=>'hash', result_naked=>0 },
+    );
+
+
 };
 
 subtest "transaction" => sub {
