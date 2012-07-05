@@ -99,7 +99,7 @@ sub _init {
 
     $dbh->do(<<_) or return "Can't init tx db: create tx: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS tx (
-    ser_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ser_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     str_id VARCHAR(200) NOT NULL,
     owner_id VARCHAR(64) NOT NULL,
     summary TEXT,
@@ -120,7 +120,7 @@ _
     $dbh->do(<<_) or return "Can't init tx db: create call: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS call (
     tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     ctime REAL NOT NULL,
     f TEXT NOT NULL,
     args TEXT NOT NULL
@@ -143,6 +143,30 @@ CREATE TABLE IF NOT EXISTS redo_step (
     data BLOB NOT NULL
 )
 _
+
+    $dbh->do(<<_) or return "Can't init tx db: create _meta: ".$dbh->errstr;
+CREATE TABLE IF NOT EXISTS _meta (
+    name TEXT PRIMARY KEY NOT NULL,
+    value TEXT
+)
+_
+    $dbh->do(<<_) or return "Can't init tx db: insert v: ".$dbh->errstr;
+-- v is incremented everytime schema changes
+INSERT OR IGNORE INTO _meta VALUES ('v', '1')
+_
+
+    # deal with table structure changes
+  UPDATE_SCHEMA:
+    while (1) {
+        my ($v) = $dbh->selectrow_array(
+            "SELECT value FROM _meta WHERE name='v'");
+        if ($v eq 'x') {
+            $dbh->do("UPDATE _meta SET value='1' WHERE name='v'");
+        } else {
+            # already the latest schema version
+            last UPDATE_SCHEMA;
+        }
+    }
 
     $self->{_dbh} = $dbh;
     $log->tracef("[txm] Data dir initialization finished");
