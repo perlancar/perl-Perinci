@@ -839,7 +839,7 @@ L<Perinci::Access::InProcess::Tx> for more details.
 =head2 Location of metadata
 
 By default, the metadata should be put in C<%SPEC> package variable, in a key
-with the same name as the URI path leaf (use C<:package>) for the package
+with the same name as the URI path leaf (use C<:package> for the package
 itself). For example, metadata for C</Foo/Bar/$var> should be put in
 C<$Foo::Bar::SPEC{'$var'}>, C</Foo/Bar/> in C<$Foo::Bar::SPEC{':package'}>. The
 metadata for the top-level namespace (C</>) should be put in
