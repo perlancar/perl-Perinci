@@ -32,6 +32,8 @@ sub new {
     return "pa object must be an instance of Perinci::Access::InProcess"
         unless $opts{pa}->isa("Perinci::Access::InProcess");
 
+    $opts{_nest_level} = 1;
+
     my $obj = bless \%opts, $class;
     if ($opts{data_dir}) {
         unless (-d $opts{data_dir}) {
@@ -97,7 +99,9 @@ sub _init {
 
     # init database
 
-    $dbh->do(<<_) or return "Can't init tx db: create tx: ". $dbh->errstr;
+    my $ep = "Can't init tx db:"; # error prefix
+
+    $dbh->do(<<_) or return "$ep create tx: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS tx (
     ser_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     str_id VARCHAR(200) NOT NULL,
@@ -117,25 +121,26 @@ _
     # crashes before calling c1. since last_call_id is set to c2, then during
     # recovery, rollback continues at c1.
 
-    $dbh->do(<<_) or return "Can't init tx db: create call: ". $dbh->errstr;
+    $dbh->do(<<_) or return "$ep create call: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS call (
     tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     ctime REAL NOT NULL,
     f TEXT NOT NULL,
-    args TEXT NOT NULL
+    args TEXT NOT NULL,
+    nest_level INTEGER NOT NULL DEFAULT 1
 )
 _
-    $dbh->do(<<_) or return "Can't init tx db: create undo_step: ".$dbh->errstr;
+    $dbh->do(<<_) or return "$ep create undo_step: ".$dbh->errstr;
 CREATE TABLE IF NOT EXISTS undo_step (
-    call_id INT NOT NULL, -- refers txcall(id)
+    call_id INT NOT NULL, -- refers call(id) OR subcall(id)
     -- seq INTEGER NOT NULL, -- uses ROWID instead, sqlite-specific
     name TEXT, -- for named savepoint
     ctime REAL NOT NULL,
     data BLOB NOT NULL
 )
 _
-    $dbh->do(<<_) or return "Can't init tx db: create redo_step: ".$dbh->errstr;
+    $dbh->do(<<_) or return "$ep create redo_step: ".$dbh->errstr;
 CREATE TABLE IF NOT EXISTS redo_step (
     call_id INT NOT NULL, -- refers txcall(id)
     -- seq INTEGER NOT NULL, -- uses ROWID instead, sqlite-specific
@@ -144,15 +149,15 @@ CREATE TABLE IF NOT EXISTS redo_step (
 )
 _
 
-    $dbh->do(<<_) or return "Can't init tx db: create _meta: ".$dbh->errstr;
+    $dbh->do(<<_) or return "$ep create _meta: ".$dbh->errstr;
 CREATE TABLE IF NOT EXISTS _meta (
     name TEXT PRIMARY KEY NOT NULL,
     value TEXT
 )
 _
-    $dbh->do(<<_) or return "Can't init tx db: insert v: ".$dbh->errstr;
+    $dbh->do(<<_) or return "$ep insert v: ".$dbh->errstr;
 -- v is incremented everytime schema changes
-INSERT OR IGNORE INTO _meta VALUES ('v', '1')
+INSERT OR IGNORE INTO _meta VALUES ('v', '2')
 _
 
     # deal with table structure changes
@@ -160,8 +165,12 @@ _
     while (1) {
         my ($v) = $dbh->selectrow_array(
             "SELECT value FROM _meta WHERE name='v'");
-        if ($v eq 'x') {
-            $dbh->do("UPDATE _meta SET value='1' WHERE name='v'");
+        if ($v eq '1') {
+            $dbh->do("ALTER TABLE call ADD COLUMN ".
+                         "nest_level INTEGER NOT NULL DEFAULT 1")
+                or return "$ep alter1.1: ".$dbh->errstr;
+            $dbh->do("UPDATE _meta SET value='2' WHERE name='v'")
+                or return "$ep update v 1->2: ".$dbh->errstr;
         } else {
             # already the latest schema version
             last UPDATE_SCHEMA;
@@ -304,7 +313,7 @@ sub _rollback_or_undo_or_redo {
 
         my $lci = $tx->{last_call_id};
         my $rows = $dbh->selectall_arrayref(
-            "SELECT id, f, args FROM call WHERE tx_ser_id=? ".
+            "SELECT id, f, args FROM call WHERE tx_ser_id=? AND nest_level=1 ".
                 ($lci ? "AND (id<>$lci AND ".
                      "ctime >= (SELECT ctime FROM call WHERE id=$lci))" : "").
                     "ORDER BY ctime, id",
@@ -653,9 +662,11 @@ sub record_call {
         code => sub {
             my $dbh = $self->{_dbh};
             my $f = $args{f} // $caller[3];
-            $dbh->do("INSERT INTO call (tx_ser_id, ctime, f, args) ".
-                         "VALUES (?,?,?,?)", {},
-                     $self->{_cur_tx}{ser_id}, $self->{_now}, $f, $eargs)
+            $dbh->do(
+                "INSERT INTO call (tx_ser_id, ctime, f, args, nest_level) ".
+                    "VALUES (?,?,?,?,?)", {},
+                $self->{_cur_tx}{ser_id}, $self->{_now}, $f, $eargs,
+                $self->{_nest_level})
                 or return [532, "db: Can't insert call: ".$dbh->errstr];
             return [200, "OK", $dbh->last_insert_id('','','','')];
         },
@@ -919,6 +930,26 @@ transaction data directory to provide trash_dir/tmp_dir for functions that
 require it.
 
 
+=head1 ATTRIBUTES
+
+=head2 _tx_id
+
+This is just a convenience so that methods that require tx_id will get the
+default value from here if tx_id not specified in arguments.
+
+=head2 _nest_level
+
+Nest level (by default 1, the outermost, increases by one for each increased
+nest level). A transactional function can call another transactional function,
+and that constitutes a nesting.
+
+Internally, subcalls are also recorded in the C<call> table, and its undo/redo
+steps in the C<undo_step>/C<redo_step> table. However, during
+rollback/undo/redo, the transaction manager only directly processes outermost
+calls (those with nest_level=1). The function's is responsible for using the
+subcall (and its steps) information.
+
+
 =head1 METHODS
 
 =head2 new(%args) => OBJ
@@ -983,11 +1014,6 @@ reached, the old transactions will start to be purged.
 Not yet implemented.
 
 =back
-
-=head2 $tx->_tx_id($tx_id)
-
-Set tx_id. This is just a convenience so that methods that require tx_id will
-get the default value from here if tx_id not specified in arguments.
 
 =head2 $tx->begin(%args) => RESP
 
