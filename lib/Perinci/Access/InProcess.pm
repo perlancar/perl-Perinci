@@ -531,13 +531,15 @@ sub action_child_metas {
     my $ents = $res->[2];
 
     my %res;
+    my %om;
     for my $ent (@$ents) {
         $res = $self->request(meta => $ent);
         # ignore failed request
         next unless $res->[0] == 200;
         $res{$ent} = $res->[2];
+        $om{$ent}  = $res->[3]{orig_meta};
     }
-    [200, "OK", \%res];
+    [200, "OK", \%res, {orig_metas=>\%om}];
 }
 
 sub actionmeta_get { +{
