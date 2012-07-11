@@ -116,6 +116,7 @@ sub _get_code_and_meta {
     return [404, "No metadata"] unless $meta;
 
     my $code;
+    my $extra;
     if ($req->{-type} eq 'function') {
         $code = \&{$name};
         my $wres = Perinci::Sub::Wrapper::wrap_sub(
@@ -128,9 +129,17 @@ sub _get_code_and_meta {
         return [500, "Can't wrap function: $wres->[0] - $wres->[1]"]
             unless $wres->[0] == 200;
         $code = $wres->[2]{sub};
-        $meta = $wres->[2]{meta};
 
-        $self->{_cache}{$name} = [$code, $meta];
+        $extra = {
+            # store some info about the old meta, no need to store all for
+            # efficiency
+            orig_meta=>{
+                result_naked=>$meta->{result_naked},
+                args_as=>$meta->{args_as},
+            },
+        };
+        $meta = $wres->[2]{meta};
+        $self->{_cache}{$name} = [$code, $meta, $extra];
     }
     unless (defined $meta->{entity_version}) {
         my $ver = ${ $req->{-module} . "::VERSION" };
@@ -138,7 +147,7 @@ sub _get_code_and_meta {
             $meta->{entity_version} = $ver;
         }
     }
-    [200, "OK", [$code, $meta]];
+    [200, "OK", [$code, $meta, $extra]];
 }
 
 sub request {
@@ -360,8 +369,8 @@ sub action_meta {
     return [404, "No metadata for /"] unless $req->{-module};
     my $res = $self->_get_code_and_meta($req);
     return $res unless $res->[0] == 200;
-    my (undef, $meta) = @{$res->[2]};
-    [200, "OK", $meta];
+    my (undef, $meta, $extra) = @{$res->[2]};
+    [200, "OK", $meta, {orig_meta=>$extra->{orig_meta}}];
 }
 
 sub actionmeta_call { +{
