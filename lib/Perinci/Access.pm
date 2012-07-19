@@ -23,6 +23,12 @@ sub new {
     $opts{handlers}{https}        //= 'Perinci::Access::HTTP::Client';
     $opts{handlers}{'riap+tcp'}   //= 'Perinci::Access::TCP::Client';
 
+    my @schemes = keys %{$opts{handlers}};
+    for (@schemes) {
+        next if /\A(riap|pl|http|https|riap\+tcp)\z/;
+        $log->warnf("Unknown Riap scheme %s", $_);
+    }
+
     $opts{_handler_objs}          //= {};
     bless \%opts, $class;
 }
