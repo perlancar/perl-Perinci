@@ -19,7 +19,38 @@ package Perinci;
 =head1 STATUS
 
 Some modules have been implemented, some (including important ones) have not.
-See details on CPAN.
+Yet some other still lack important features. But it is safe to start putting
+metadata to your code as the Rinci specification is pretty stable (or versioned,
+anyway) nowadays.
+
+Some rather important (IMO, YMMV) things not yet implemented including:
+
+=over 4
+
+=item * Argument validation
+
+L<Perinci::Sub::Wrapper> still does not generate code to validate function
+arguments. This is because the L<Sah> schema is still somewhat in flux and
+largely unimplemented.
+
+I usually do some manual and minimal argument validation manually in the
+function body. They can be removed once the wrapper generates validation code,
+or left as is (sometimes the function is used unwrapped).
+
+=item * Exporting
+
+L<Perinci::Exporter> is not yet implemented. The module's planned features
+include: automatic wrapping when exporting, different wrappers for different
+importers (e.g. A wants to use named arguments, B wants positional arguments, C
+wants to timeout execution), automatic exports, exporting by tags (specified in
+metadata), etc.
+
+Currently you can use Exporter, Exporter::Lite, or other usual ways of
+exporting.
+
+=back
+
+See more details on CPAN.
 
 
 =head1 DESCRIPTION
@@ -63,8 +94,8 @@ for you.
 
 L<Perinci::CmdLine> is an extensible and featureful command-line library to
 create command-line programs and API clients. Features include: transparent
-remote access (thanks to Riap::HTTP), command-line options parsing, --help
-message, shell tab completion, etc.
+remote access (thanks to Riap), command-line options parsing, --help message,
+shell tab completion, etc.
 
 =item * Documentation tools
 
