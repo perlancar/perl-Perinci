@@ -37,17 +37,6 @@ I usually do some manual and minimal argument validation manually in the
 function body. They can be removed once the wrapper generates validation code,
 or left as is (sometimes the function is used unwrapped).
 
-=item * Exporting
-
-L<Perinci::Exporter> is not yet implemented. The module's planned features
-include: automatic wrapping when exporting, different wrappers for different
-importers (e.g. A wants to use named arguments, B wants positional arguments, C
-wants to timeout execution), automatic exports, exporting by tags (specified in
-metadata), etc.
-
-Currently you can use Exporter, Exporter::Lite, or other usual ways of
-exporting.
-
 =back
 
 See more details on CPAN.
