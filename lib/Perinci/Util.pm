@@ -1,11 +1,14 @@
 package Perinci::Util;
 
+use SHARYANTO::Package::Util qw(package_exists);
+
 require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT_OK = qw(
                        declare_property
                        declare_function_feature
                        declare_function_dep
+                       get_package_meta_accessor
                );
 
 # VERSION
@@ -102,6 +105,39 @@ sub declare_function_dep {
         no strict 'refs';
         *{"Perinci::Sub::DepChecker::checkdep_$name"} = $check;
     }
+}
+
+sub get_package_meta_accessor {
+    my %args = @_;
+
+    my $pkg = $args{package};
+    my $def = $args{default_class} //
+        'Perinci::Access::InProcess::MetaAccessor';
+
+    no strict 'refs';
+    my $ma   = ${ "$pkg\::PERINCI_META_ACCESSOR" } // $def;
+    my $ma_p = $ma;
+    $ma_p  =~ s!::!/!g;
+    $ma_p .= ".pm";
+    eval { require $ma_p };
+    my $req_err = $@;
+    if ($req_err) {
+        if (!package_exists($ma)) {
+            return [500, "Can't load meta accessor module $ma (probably ".
+                        "mistyped or missing module): $req_err"];
+        } elsif ($req_err !~ m!Can't locate!) {
+            return [500, "Can't load meta accessor module $ma (probably ".
+                        "compile error): $req_err"];
+        }
+        # require error of "Can't locate ..." can be ignored. it
+        # might mean package is already defined by other code. we'll
+        # try and access it anyway.
+    } elsif (!package_exists($ma)) {
+        # shouldn't happen
+        return [500, "Meta accessor module loaded OK, but no $ma package ".
+                    "found, something's wrong"];
+    }
+    [200, "OK", $ma];
 }
 
 1;

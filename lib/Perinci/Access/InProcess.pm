@@ -7,6 +7,7 @@ use Log::Any '$log';
 
 use parent qw(Perinci::Access::Base);
 
+use Perinci::Util qw(get_package_meta_accessor);
 use Scalar::Util qw(blessed);
 use SHARYANTO::Package::Util qw(package_exists);
 use URI;
@@ -67,31 +68,10 @@ sub _init {
 sub _get_meta_accessor {
     my ($self, $req) = @_;
 
-    no strict 'refs';
-    my $ma = ${ $req->{-module} . "::PERINCI_META_ACCESSOR" } //
-        $self->{meta_accessor};
-    my $ma_p = $ma;
-    $ma_p =~ s!::!/!g;
-    $ma_p .= ".pm";
-    eval { require $ma_p };
-    my $req_err = $@;
-    if ($req_err) {
-        if (!package_exists($ma)) {
-            return [500, "Can't load meta accessor module $ma (probably ".
-                        "mistyped or missing module): $req_err"];
-        } elsif ($req_err !~ m!Can't locate!) {
-            return [500, "Can't load meta accessor module $ma (probably ".
-                        "compile error): $req_err"];
-        }
-        # require error of "Can't locate ..." can be ignored. it
-        # might mean package is already defined by other code. we'll
-        # try and access it anyway.
-    } elsif (!package_exists($ma)) {
-        # shouldn't happen
-        return [500, "Meta accessor module loaded OK, but no $ma package ".
-                    "found, something's wrong"];
-    }
-    [200, "OK", $ma];
+    get_package_meta_accessor(
+        package => $req->{-module},
+        default_class => $self->{meta_accessor}
+    );
 }
 
 sub _get_code_and_meta {
