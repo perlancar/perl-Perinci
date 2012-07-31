@@ -100,7 +100,8 @@ sub _get_code_and_meta {
     if ($req->{-type} eq 'function') {
         $code = \&{$name};
         my $wres = Perinci::Sub::Wrapper::wrap_sub(
-            sub=>$code, meta=>$meta,
+            sub=>$code, sub_name=>$name, meta=>$meta,
+            forbid_tags => ['die'],
             %{$self->{extra_wrapper_args}},
             convert=>{
                 args_as=>'hash', result_naked=>0,
