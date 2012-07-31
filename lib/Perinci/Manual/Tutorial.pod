@@ -1,0 +1,68 @@
+package Perinci::Manual::Tutorial; # make podweaver happy
+
+1;
+# ABSTRACT: Using the Perinci modules
+
+=head1 ABOUT PERINCI
+
+# family of modules to ...
+
+# philosophy
+
+# quote: give me functions and i'll conquer the world (archimedes)
+
+# background: laziness, functions for reuse (experience with starting with
+# command-line programs, then problem when needing a library, or API).
+
+
+=head1 GETTING STARTED
+
+# a few example functions (some with network, ...), add some simple property
+
+# add Perinci::Exporter
+
+
+=head1 CALLING FUNCTIONS (and importing)
+
+# about wrapping
+
+# note about validation
+
+# positional
+
+# some more properties: timeout, retry
+
+
+=head1 COMMAND-LINE PROGRAMS
+
+
+=head1 CREATING POD DOCUMENTATION (and some dzil)
+
+
+=head1 HTTP API
+
+
+=head1 WHAT ELSE IS AVAILABLE?
+
+# deps
+
+# generating metadata: for module
+
+# generating metadata: access table
+
+# perinci::use
+
+# undo
+
+# transaction
+
+
+=head1 WHAT NOW?
+
+
+=head1 FAQ
+
+=head2 What about OO?
+
+
+=head1 SEE ALSO
