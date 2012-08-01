@@ -53,17 +53,20 @@ my $specs = {
 
 # static method
 sub get_meta {
-    my ($class, $req) = @_;
-
-    my $leaf   = $req->{-leaf};
-    my $key    = $req->{-leaf} || ':package';
+    my ($class, $package, $leaf) = @_;
+    my $key = $leaf || ':package';
     $specs->{$key};
 }
 
 sub get_all_meta {
     my ($class, $req) = @_;
-    no strict 'refs';
     $specs;
+}
+
+sub set_meta {
+    my ($class, $package, $leaf, $meta) = @_;
+    my $key = $leaf || ':package';
+    $specs->{$key} = $meta;
 }
 
 package Test::CustomMetaAccessor;

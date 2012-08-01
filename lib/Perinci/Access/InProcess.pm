@@ -59,7 +59,7 @@ sub _init {
     $self->{custom_tx_manager}     //= undef;
 
     # other attributes
-    $self->{meta_accessor} //= "Perinci::Access::InProcess::MetaAccessor";
+    $self->{meta_accessor} //= "Perinci::MetaAccessor::Default";
     $self->{load}                  //= 1;
     $self->{extra_wrapper_args}    //= {};
     $self->{extra_wrapper_convert} //= {};
@@ -86,7 +86,7 @@ sub _get_code_and_meta {
     return $res if $res->[0] != 200;
     my $ma = $res->[2];
 
-    my $meta = $ma->get_meta($req);
+    my $meta = $ma->get_meta($req->{-module}, $req->{-leaf});
 
     # supply a default, empty metadata for package, just so we can put $VERSION
     # into it
@@ -320,7 +320,7 @@ sub action_list {
     my $res = $self->_get_meta_accessor($req);
     return $res if $res->[0] != 200;
     my $ma = $res->[2];
-    my $spec = $ma->get_all_meta($req);
+    my $spec = $ma->get_all_meta($req->{-module});
     my $base = "pl:/$req->{-module}"; $base =~ s!::!/!g;
     for (sort keys %$spec) {
         next if /^:/;
@@ -842,9 +842,9 @@ C<'Custom_Class'> to constructor argument, or set this in your module:
 
  our $PERINCI_META_ACCESSOR = 'Custom::Class';
 
-The default accessor class is L<Perinci::Access::InProcess::MetaAccessor>.
-Alternatively, you can simply devise your own system to retrieve metadata which
-you can put in C<%SPEC> at the end.
+The default accessor class is L<Perinci::MetaAccessor::Default>. Alternatively,
+you can simply devise your own system to retrieve metadata which you can put in
+C<%SPEC> at the end.
 
 
 =head1 METHODS
@@ -855,7 +855,7 @@ Instantiate object. Known attributes:
 
 =over 4
 
-=item * meta_accessor => STR (default 'Perinci::Access::InProcess::MetaAccessor')
+=item * meta_accessor => STR (default 'Perinci::MetaAccessor::Default')
 
 =item * load => BOOL (default 1)
 
