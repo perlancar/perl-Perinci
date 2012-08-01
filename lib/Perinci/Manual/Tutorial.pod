@@ -1,5 +1,7 @@
 package Perinci::Manual::Tutorial; # make podweaver happy
 
+# VERSION
+
 1;
 # ABSTRACT: Using the Perinci modules
 
