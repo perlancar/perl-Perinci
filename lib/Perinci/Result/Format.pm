@@ -4,6 +4,8 @@ use 5.010;
 use strict;
 use warnings;
 
+use Scalar::Util qw(reftype);
+
 # VERSION
 
 # text formats are special. since they are more oriented towards human instead
@@ -47,7 +49,7 @@ sub format {
 
     my $formatter = $Formats{$format} or return undef;
 
-    if (ref($formatter->[0]) eq 'CODE') {
+    if (reftype($formatter->[0]) eq 'CODE') {
         return $formatter->[0]->($format, $res);
     } else {
         return Data::Format::Pretty::format_pretty(

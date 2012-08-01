@@ -8,7 +8,7 @@ use Log::Any '$log';
 use parent qw(Perinci::Access::Base);
 
 use Perinci::Util qw(get_package_meta_accessor);
-use Scalar::Util qw(blessed);
+use Scalar::Util qw(blessed reftype);
 use SHARYANTO::Package::Util qw(package_exists);
 use URI;
 
@@ -554,7 +554,7 @@ sub _pre_tx_action {
         unless $self->{use_tx};
 
     # instantiate custom tx manager, per request if necessary
-    if (ref($self->{custom_tx_manager}) eq 'CODE') {
+    if (reftype($self->{custom_tx_manager}) eq 'CODE') {
         eval {
             $self->{_tx} = $self->{custom_tx_manager}->($self);
             die $self->{_tx} unless blessed($self->{_tx});
