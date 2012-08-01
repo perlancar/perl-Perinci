@@ -21,11 +21,13 @@ sub new {
     $opts{handlers}{pl}           //= 'Perinci::Access::InProcess';
     $opts{handlers}{http}         //= 'Perinci::Access::HTTP::Client';
     $opts{handlers}{https}        //= 'Perinci::Access::HTTP::Client';
-    $opts{handlers}{'riap+tcp'}   //= 'Perinci::Access::TCP::Client';
+    $opts{handlers}{'riap+tcp'}   //= 'Perinci::Access::Simple::Client';
+    $opts{handlers}{'riap+unix'}  //= 'Perinci::Access::Simple::Client';
+    $opts{handlers}{'riap+pipe'}  //= 'Perinci::Access::Simple::Client';
 
     my @schemes = keys %{$opts{handlers}};
     for (@schemes) {
-        next if /\A(riap|pl|http|https|riap\+tcp)\z/;
+        next if /\A(riap|pl|http|https|riap\+tcp|riap\+unix|riap\+pipe)\z/;
         $log->warnf("Unknown Riap scheme %s", $_);
     }
 
@@ -118,7 +120,7 @@ sub request {
  $res = $pa->request(info => "http://example.com/Sub/ModSub/func",
                      {uri=>'/Sub/ModSub/func'});
 
- # use Perinci::Access::TCP::Client
+ # use Perinci::Access::Simple::Client
  $res = $pa->request(meta => "riap+tcp://localhost:7001/Sub/ModSub/");
 
  # dies, unknown scheme
@@ -135,7 +137,9 @@ This module provides a convenient wrapper to select appropriate Riap client
  pl:/Foo/Bar           -> InProcess
  http://...            -> HTTP::Client
  https://...           -> HTTP::Client
- riap+tcp://...        -> TCP::Client
+ riap+tcp://...        -> Simple::Client
+ riap+unix://...       -> Simple::Client
+ riap+pipe://...       -> Simple::Client
 
 You can customize or add supported schemes by providing class name or object to
 the B<handlers> attribute (see its documentation for more details).
@@ -172,7 +176,9 @@ they will be require'd and instantiated. The default is:
    pl           => 'Perinci::Access::InProcess',
    http         => 'Perinci::Access::HTTP::Client',
    https        => 'Perinci::Access::HTTP::Client',
-   'riap+tcp'   => 'Perinci::Access::TCP::Client',
+   'riap+tcp'   => 'Perinci::Access::Simple::Client',
+   'riap+unix'  => 'Perinci::Access::Simple::Client',
+   'riap+pipe'  => 'Perinci::Access::Simple::Client',
  }
 
 Objects can be given instead of class names. This is used if you need to pass
