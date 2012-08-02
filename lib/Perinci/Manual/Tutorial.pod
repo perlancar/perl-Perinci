@@ -354,8 +354,9 @@ Most things are configurable, from URL dispatching routes to parameter parsing.
 Perinci::Access::HTTP::Server is actually a set of L<PSGI> middleware, which you
 can compose and customize, and deploy using any PSGI web server.
 
-It is important to note that Riap is not just a protocol for calling function,
-but also to access metadata:
+It is important to note that Riap is not just a protocol for calling function
+(a.k.a. the C<call> action), but also to access metadata and do other things. To
+get metadata for a code entity, use the C<meta> action:
 
  $ curl http://localhost:5000/MyApp/add_array?-riap-action=meta
  ---
@@ -393,13 +394,24 @@ but also to access metadata:
  summary: Add two arrays
  v: 1.1
 
- $ curl 'http://localhost:5000/MyApp/?-riap-action=list&-riap-fmt=json'
- [200,"OK",["pl:/MyApp/add_array"]]
+Let's add a couple more functions in MyApp, for demonstration (don't forget to
+restart the HTTP server afterwards):
 
-A host is viewed as a tree of code entities with / at the root. By using the
-Riap action C<list> to list contents of package entities, and by using the Riap
-action C<meta> to view an entity's metadata, we have a self-documenting and
-discoverable service. This is applicable to every web service implementing the
+ $SPEC{foo} = {};
+ sub foo { }
+
+ $SPEC{bar} = {};
+ sub bar { }
+
+To list code entities contained in a package entity (in this case, functions
+inside a package), we can use the C<list> action:
+
+$ curl 'http://localhost:5000/MyApp/?-riap-action=list&-riap-fmt=json'
+ [200,"OK",["pl:/MyApp/add_array", "pl:/MyApp/foo", "pl:/MyApp/bar"]]
+
+A host is viewed as a tree of code entities with the root package entity /. By
+using the Riap actions C<list> and C<meta>, we have a self-documenting and
+discoverable web service. This is applicable to every service implementing the
 Riap protocol.
 
 
