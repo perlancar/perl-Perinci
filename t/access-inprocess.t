@@ -58,7 +58,7 @@ sub get_meta {
     $specs->{$key};
 }
 
-sub get_all_meta {
+sub get_all_metas {
     my ($class, $req) = @_;
     $specs;
 }

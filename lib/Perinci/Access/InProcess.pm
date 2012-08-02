@@ -320,7 +320,7 @@ sub action_list {
     my $res = $self->_get_meta_accessor($req);
     return $res if $res->[0] != 200;
     my $ma = $res->[2];
-    my $spec = $ma->get_all_meta($req->{-module});
+    my $spec = $ma->get_all_metas($req->{-module});
     my $base = "pl:/$req->{-module}"; $base =~ s!::!/!g;
     for (sort keys %$spec) {
         next if /^:/;
