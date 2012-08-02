@@ -49,7 +49,7 @@ sub format {
 
     my $formatter = $Formats{$format} or return undef;
 
-    if (reftype($formatter->[0]) eq 'CODE') {
+    if ((reftype($formatter->[0]) // '') eq 'CODE') {
         return $formatter->[0]->($format, $res);
     } else {
         return Data::Format::Pretty::format_pretty(
