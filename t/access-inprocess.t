@@ -44,37 +44,6 @@ sub f1 { [200, "OK", 2] }
 $SPEC{f2} = {v=>1.1};
 sub f2 { [200, "OK", 3] }
 
-package MyMetaAccessor;
-
-my $specs = {
-    f1 => {v=>1.1, summary=>"foo"},
-    f2 => {v=>1.1, summary=>"bar"},
-};
-
-# static method
-sub get_meta {
-    my ($class, $package, $leaf) = @_;
-    my $key = $leaf || ':package';
-    $specs->{$key};
-}
-
-sub get_all_metas {
-    my ($class, $req) = @_;
-    $specs;
-}
-
-sub set_meta {
-    my ($class, $package, $leaf, $meta) = @_;
-    my $key = $leaf || ':package';
-    $specs->{$key} = $meta;
-}
-
-package Test::CustomMetaAccessor;
-
-our $PERINCI_META_ACCESSOR = "MyMetaAccessor";
-sub f1 { [200, "OK", 1] }
-sub f2 { [200, "OK", 2] }
-
 package main;
 
 # test after_load first, for first time loading of
@@ -351,42 +320,6 @@ test_request(
             or diag explain $res;
     },
 );
-
-subtest "custom meta accessor" => sub {
-    test_request(
-        name => 'via $PERINCI_META_ACCESSOR #1',
-        req => [meta => "/Test/CustomMetaAccessor/f1"],
-        status => 200,
-        result => { v => 1.1, summary => 'foo',
-                    args_as=>'hash', result_naked=>0 },
-    );
-    test_request(
-        name => 'via $PERINCI_META_ACCESSOR #2',
-        req => [meta => "/Test/CustomMetaAccessor/f2"],
-        status => 200,
-        result => { v => 1.1, summary => 'bar',
-                    args_as=>'hash', result_naked=>0 },
-    );
-
-    undef $Test::CustomMetaAccessor::PERINCI_META_ACCESSOR;
-    test_request(
-        name => 'no $PERINCI_META_ACCESSOR',
-        object_opts=>{}, # defeat caching of metadata
-        req => [meta => "/Test/CustomMetaAccessor/f1"],
-        status => 404,
-    );
-
-    test_request(
-        name => 'via meta_accessor in constructor',
-        object_opts=>{meta_accessor=>"MyMetaAccessor"},
-        req => [meta => "/Test/CustomMetaAccessor/f1"],
-        status => 200,
-        result => { v => 1.1, summary => 'foo',
-                    args_as=>'hash', result_naked=>0 },
-    );
-
-
-};
 
 subtest "transaction" => sub {
     # yeah, symlink() is not really necessary, but at the time of writing this
