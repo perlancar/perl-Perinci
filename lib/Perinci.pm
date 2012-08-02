@@ -5,25 +5,10 @@ package Perinci;
 1;
 # ABSTRACT: Collection of Perl modules for Rinci and Riap
 
-=head1 SYNOPSIS
-
- use Perinci::Easy qw(defsub);
-
- # define a subroutine
- defsub name=>'foo', summary=>'Blah ...',
-     code=>sub {
-         ...
-     };
-
-
 =head1 STATUS
 
-Some modules have been implemented, some (including important ones) have not.
-Yet some other still lack important features. But it is safe to start putting
-metadata to your code as the Rinci specification is pretty stable (or versioned,
-anyway) nowadays.
-
-Some rather important (IMO, YMMV) things not yet implemented including:
+Most modules have been implemented. It is safe to start putting metadata to your
+code. However, some have not:
 
 =over 4
 
@@ -35,11 +20,9 @@ largely unimplemented.
 
 I usually do some manual and minimal argument validation manually in the
 function body. They can be removed once the wrapper generates validation code,
-or left as is (sometimes the function is used unwrapped).
+or left as-is (sometimes the function is used unwrapped).
 
 =back
-
-See more details on CPAN.
 
 
 =head1 DESCRIPTION
@@ -71,9 +54,9 @@ L<Perinci::Access::HTTP::Client> and L<Perinci::Access::HTTP::Server> is a pair
 of client/server library to access Perl modules/functions using Riap over HTTP,
 implementing the L<Riap::HTTP> specification.
 
-L<Perinci::Access::TCP::Client> and L<Perinci::Access::TCP::Server> is a pair of
-client/server library to access Perl modules/functions using Riap over TCP,
-implementing the L<Riap::TCP> specification.
+L<Perinci::Access::Simple::Client>, L<Perinci::Access::Simple::Server::Socket>,
+L<Perinci::Access::Simple::Server::Pipe> are client/server libraries that
+implement L<Riap::Simple>, either via TCP/Unix socket or piping.
 
 L<Perinci::Access> is a simple wrapper for all Riap clients, you give it a
 URL/module name/whatever and it will try to select the appropriate Riap client
@@ -107,19 +90,7 @@ See CPAN for more Perinci::* modules.
 
 =back
 
-To get started, read L<Perinci::Access::InProcess> which will tell you on how to
-write your functions and where to put the metadata. Or, if you only want to
-access existing code/metadata, head over to L<Perinci::Access> or
-L<Perinci::CmdLine>.
-
-To declare and implement a new function metadata property, see example in one of
-the C<Perinci-Sub-property-*> modules, like L<Perinci::Sub::property::timeout>.
-
-To declare and implement a new function feature, see example in one of the
-C<Perinci-Sub-feature-*> modules, like L<Perinci::Sub::feature::foo>.
-
-To declare and implement a new function dependency type, see example in one of
-the C<Perinci-Sub-dep-*> modules, like L<Perinci::Sub::dep::pm>.
+To get started, read L<Perinci::Manual::Tutorial>.
 
 
 =head1 FAQ
