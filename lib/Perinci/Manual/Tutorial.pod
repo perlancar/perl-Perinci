@@ -19,16 +19,16 @@ locally or remotely and across language.
 The main philosophy that guides the development of Rinci, Riap, and Perinci is
 laziness: not having to do much plumbing manually, not having to write needless
 code, not wanting to repeat yourself, not having to reimplement existing stuffs
-just because you switch language, not having to learn different API's for each
-web service. Another philosophy is to focus on functions (as opposed to classes
-or objects, or other kind of code entity). Function is the basic unit of reuse
-of a program. By making functions more powerful, reusable, flexible, we can
-greatly improve the development experience.
+just because you switch language, not having to learn different ways to access
+API's for each web service. Another philosophy is to focus on functions (as
+opposed to classes or objects, or other kind of code entity). Function is the
+basic unit of reuse of a program. By making functions more powerful, reusable,
+flexible, we can greatly improve the development experience.
 
 
 =head1 GETTING STARTED
 
-Let's start this tutorial by writing an example function:
+Let us start this tutorial by writing an example function:
 
  package MyApp;
 
@@ -82,11 +82,11 @@ numbers:
  }
 
 Here we see a problem: validating input can sometimes be tedious and boring. In
-the above example, it's even longer than the actual "business" routine.
+the above example, it is even longer than the actual "business" routine.
 
 What about if we just specify, in a higher-level language, what kind of input we
 want, and later just let some code generator generate the validator code for us?
-Let's write our first function metadata.
+Let us write our first function metadata.
 
  our %SPEC;
  $SPEC{add_array} = {
@@ -110,20 +110,19 @@ Let's write our first function metadata.
 
 Metadata is a hashref, put in the C<%SPEC> package variable, under the key name
 that is the same as the function name. It actually doesn't have to be put there,
-but that's the default location.
+but that is the default location.
 
 Now our function is nice and short again. But at first glance, the metadata does
-contain quite a few items (some seem weird and needless). Let's go through them
+contain quite a few items (some seem weird and needless). Let us go through them
 key by key (or, as it is called, property):
 
 =over 4
 
 =item * v => 1.1
 
-This property is always needed because there used to be an incompatible, first
-version of the metadata format (called 1.0). Specifications evolve, fact of
-life. To keep backward compatibility, if C<v> is not specified, it is assumed to
-be 1.0.
+This property is needed because there used to be an incompatible, first version
+of the metadata format (called 1.0). Specifications evolve, fact of life. To
+keep backward compatibility, if C<v> is not specified, it is assumed to be 1.0.
 
 =item * result_naked => 1
 
@@ -171,11 +170,11 @@ installation instructions until the end of the tutorial).
 
  1;
 
-Here you can notice one thing: there's no longer any need to declare @ISA (a
+Here you can notice one thing: there is no longer any need to declare @ISA (a
 quirkiness of Exporter) and @EXPORT_OK. All functions which have metadata are
 assumed to be exportable.
 
-Now let's use our function again:
+Now let us use our function again:
 
  use MyApp qw(add_array);
  add_array([1, 2, 3], 3); # now dies: "a2 must be an array"
@@ -189,19 +188,20 @@ using instructions specified in the metadata.
 
 (Note: argument validation actually does not work yet, I'm still working on it,
 please check back the status of Perinci::Sub::Wrapper and L<Data::Sah>
-regularly. The other properties work though.)
+regularly. Most of the other properties already work though.)
 
 
 =head1 COMMAND-LINE PROGRAMS
 
 Suppose you want to create a CLI program for your module. Some basic
-functionality of a CLI program include command-line options processing and
+functionalities of a CLI program include command-line options processing and
 help/usage message. The "traditional" way of accomplishing this is with a module
 like L<Getopt::Long>, yet this is one example of boring, plumbing code. With
-another tool, we can replace all that work with just a single line of code.
-Please install L<Perinci::CmdLine> first if you don't have it on your system.
+another tool, we can replace all that tedious work with just a single line of
+code. Please install L<Perinci::CmdLine> first if you don't have it on your
+system.
 
-But first, let's add some text to our metadata:
+But before we use Perinci::CmdLine, let us add some text to our metadata:
 
  $SPEC{add_array} = {
      v            => 1.1,
@@ -210,7 +210,7 @@ But first, let's add some text to our metadata:
      summary      => 'Add two arrays',
      description  => <<'EOT',
 
-This function adds two array numerically. You should supply two arrays of the
+This function adds two array numerically. You *should* supply two arrays of the
 same length containing only numbers.
 
 EOT
@@ -236,7 +236,7 @@ Now create a script C<myapp>:
  use Perinci::CmdLine;
  Perinci::CmdLine->new(url => '/MyApp/add_array')->run;
 
-To execute program:
+To execute the program:
 
  % myapp --a1 '[1,2,3]' --a2 '[4,5,6]'
  % myapp '[1,2,3]' '[4,5,6]';           # ditto
@@ -266,9 +266,9 @@ To generate help message:
 
  Usage:
 
-     -e --help (or -h, -?)
-     -e --version (or -v)
-     -e [common options] [options]
+     myapp --help (or -h, -?)
+     myapp --version (or -v)
+     myapp [common options] [options]
 
  Common options:
 
@@ -286,10 +286,10 @@ To generate help message:
 
 By just saying C<< Perinci::CmdLine->new(url => '/MyApp/add_array')->run; >> we
 have constructed a complete CLI program, which can parse command-line options
-(taken from function arguments), help/usage message (using summary and other
-information from metadata), output result in a variety of formats (YAML, JSON,
-text, and more), among other things. Other features not demonstrated in this
-tutorial include subcommands, logging, Bash tab completion.
+(taken from function arguments), show help/usage message (using summary and
+other information from metadata), output result in a variety of formats (YAML,
+JSON, text, and more), among other things. Other features not demonstrated in
+this tutorial include subcommands, logging, Bash tab completion.
 
 Several things worth noting:
 
@@ -301,17 +301,17 @@ Instead of using Perl package and function names directly, Perinci::CmdLine
 refers to code entities using Riap URLs. This means C<MyApp::add_array> becomes
 C</MyApp/add_array> (actually C<pl:/MyApp/add_array>). Other schemes are
 available, including http/https and tcp/unix/pipe. This means, Perinci::CmdLine
-(and other tools) can provide command-line interface (and do other stuffs) for
-remote code entities.
+can provide command-line interface for remote code entities. Many other Perinci
+tools also operate on URLs and thus share the remote access capability.
 
 =item * Parsing argument value
 
-Since the a1 and a2 arguments are not simple string/scalar, Perinci::CmdLine
-tries to interpret the command-line options as JSON or YAML.
+Perinci::CmdLine can accept simple string values or complex structures. Complex
+structures will be parsed using JSON or YAML (in that order).
 
 =item * Markdown
 
-The C<description> property is in Markdown format.
+The value of C<description> property is in Markdown format.
 
 =back
 
@@ -394,7 +394,7 @@ get metadata for a code entity, use the C<meta> action:
  summary: Add two arrays
  v: 1.1
 
-Let's add a couple more functions in MyApp, for demonstration (don't forget to
+Let us add a couple more functions in MyApp, for demonstration (don't forget to
 restart the HTTP server afterwards):
 
  $SPEC{foo} = {};
@@ -457,7 +457,7 @@ result:
  }
 
 As you can see, if you do this, you no longer have to state that your results
-are naked. Let's see how this works in CLI and over HTTP:
+are naked. Let us see how this works in CLI and over HTTP:
 
  % myapp --a1 '[]' --a2 '[1]'
  ERROR 400: Arrays are not of same length
@@ -475,7 +475,7 @@ function like this:
 
 =head1 WHAT ELSE IS AVAILABLE?
 
-What's covered in this tutorial is just the tip of the iceberg. Metadata can be
+What is covered in this tutorial is just the tip of the iceberg. Metadata can be
 as rich as you can. It can also be used to declare dependencies (e.g. checking
 whether B<rsync> is on your C<PATH>, or whether some Perl modules are available,
 before running your function). It has also been used to specify: currying,
