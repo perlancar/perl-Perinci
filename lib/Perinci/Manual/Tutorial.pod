@@ -406,7 +406,7 @@ restart the HTTP server afterwards):
 To list code entities contained in a package entity (in this case, functions
 inside a package), we can use the C<list> action:
 
-$ curl 'http://localhost:5000/MyApp/?-riap-action=list&-riap-fmt=json'
+ $ curl 'http://localhost:5000/MyApp/?-riap-action=list&-riap-fmt=json'
  [200,"OK",["pl:/MyApp/add_array", "pl:/MyApp/foo", "pl:/MyApp/bar"]]
 
 A host is viewed as a tree of code entities with the root package entity /. By
