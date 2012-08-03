@@ -319,7 +319,7 @@ The value of C<description> property is in Markdown format.
 =head1 POD DOCUMENTATION
 
 Aside from generating help/usage message for a CLI program, the same information
-in metadata can also be used to generated POD documentation. Combined with tools
+in metadata can also be used to generate POD documentation. Combined with tools
 like L<Dist::Zilla> and L<Pod::Weaver>, this means you do not have to write an
 API spec document in POD (and manually) ever again.
 
