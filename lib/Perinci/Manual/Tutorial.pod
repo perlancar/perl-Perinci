@@ -210,10 +210,10 @@ But before we use Perinci::CmdLine, let us add some text to our metadata:
      summary      => 'Add two arrays',
      description  => <<'EOT',
 
-This function adds two array numerically. You *should* supply two arrays of the
-same length containing only numbers.
+ This function adds two array numerically. You *should* supply two arrays of the
+ same length containing only numbers.
 
-EOT
+ EOT
      args         => {
          a1 => {
              schema  => ['array*' => {of=>'num*'}],
