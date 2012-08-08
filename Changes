@@ -1,5 +1,24 @@
 Revision history for Perinci
 
+0.25     2012-08-08 (SHARYANTO)
+
+         Some changes still work in progress, released to test locking problem
+         in CT.
+
+         - Split some stuffs to Perinci-Util, especially the meta accessor
+           class, to avoid circular dep problem.
+
+         - Access::InProcess: 'meta' action now gives information on original
+           function's metadata (before being wrapped). This is useful to find
+           out original's 'args_as' or 'result_naked' property value. Similarly,
+           the 'child_metas' action also gives orig_metas information.
+
+         - Add tutorial: Perinci::Manual::Tutorial.
+
+         - txm: Lock a .lck file instead of the db file, to avoid 'db is locked'
+           error from SQLite under OpenBSD/FreeBSD (from CT reports).
+
+
 0.24     2012-07-05 (SHARYANTO)
 
          - txm: Add _meta table (containing 'v' setting) for supporting db
