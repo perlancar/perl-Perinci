@@ -58,7 +58,7 @@ sub _lock_db {
     my $locked;
     my $secs = 0;
     for (1..5) {
-        $locked = lock("$self->{_db_file}", $shared, "nonblocking");
+        $locked = lock("$self->{_db_file}.lck", $shared, "nonblocking");
         last if $locked;
         sleep    $_;
         $secs += $_;
@@ -71,7 +71,7 @@ sub _lock_db {
 sub _unlock_db {
     my ($self) = @_;
 
-    unlock("$self->{_db_file}");
+    unlock("$self->{_db_file}.lck");
     return;
 }
 
