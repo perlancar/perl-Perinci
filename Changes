@@ -1,5 +1,12 @@
 Revision history for Perinci
 
+0.26     2012-08-09 (SHARYANTO)
+
+         - Adjust to Perinci::Sub::DepChecker 0.07.
+
+         - dep pm: allow specifying minimum Perl module version.
+
+
 0.25     2012-08-08 (SHARYANTO)
 
          Some changes still work in progress, released to test locking problem
