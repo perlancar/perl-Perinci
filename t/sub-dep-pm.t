@@ -3,6 +3,8 @@
 use 5.010;
 use strict;
 use warnings;
+use FindBin '$Bin';
+use lib "$Bin/lib";
 use Test::More 0.96;
 
 use Perinci::Sub::DepChecker qw(check_deps);
@@ -29,8 +31,9 @@ sub deps_unmet {
 }
 # END copy-pasted code
 
-deps_met   {pm=>"Perinci::Sub::DepChecker"}, "pm 1";
-deps_unmet {pm=>"NonExistingModule"}, "pm 2";
+deps_met   {pm=>"Foo"}, "pm 1";
+deps_unmet {pm=>"Foo >= 0.21"}, "pm 2";
+deps_unmet {pm=>"NonExistingModule"}, "pm 3";
 
 done_testing();
 
