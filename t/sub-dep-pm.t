@@ -6,7 +6,7 @@ use warnings;
 use Test::More 0.96;
 
 use Perinci::Sub::DepChecker qw(check_deps);
-use Perinci::Sub::dep::pm;
+use Perinci::Sub::Dep::pm;
 
 # BEGIN copy-pasted from Perinci::Sub::Wrapper's test script
 sub test_check_deps {

@@ -1,4 +1,4 @@
-package Perinci::Sub::dep::pm;
+package Perinci::Sub::Dep::pm;
 
 use 5.010;
 use strict;
