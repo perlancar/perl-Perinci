@@ -32,8 +32,6 @@ sub new {
     return "pa object must be an instance of Perinci::Access::InProcess"
         unless $opts{pa}->isa("Perinci::Access::InProcess");
 
-    $opts{_nest_level} = 1;
-
     my $obj = bless \%opts, $class;
     if ($opts{data_dir}) {
         unless (-d $opts{data_dir}) {
@@ -110,16 +108,17 @@ CREATE TABLE IF NOT EXISTS tx (
     status CHAR(1) NOT NULL, -- i, a, C, U, R, u, d, X, (e) [uppercase=final]
     ctime REAL NOT NULL,
     commit_time REAL,
-    last_call_id INTEGER, -- last processed call when rollback/undo/redo
+    last_step_id INTEGER, -- last processed step when rollback
     UNIQUE (str_id)
 )
 _
 
-    # last_call_id is for the recovery process to avoid repeating all the
+    # last_step_id is for the recovery process to avoid repeating all the
     # function calls when rollback failed in the middle. for example, tx1 has 3
-    # calls c1, c2, c3 and is being rollbacked. txm executes c3, then c2, then
-    # crashes before calling c1. since last_call_id is set to c2, then during
-    # recovery, rollback continues at c1.
+    # calls each with 2 steps: c1(s1,s2), c2(s3,s4), c3(s5,s6). tx1 is being
+    # rollbacked. txm executes c3, then c2, then crashes before calling c1.
+    # since last_step_id is set to s3 at the end of calling c2, then during
+    # recovery, rollback continues at before s3, which is c1.
 
     $dbh->do(<<_) or return "$ep create call: ". $dbh->errstr;
 CREATE TABLE IF NOT EXISTS call (
@@ -127,8 +126,7 @@ CREATE TABLE IF NOT EXISTS call (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     ctime REAL NOT NULL,
     f TEXT NOT NULL,
-    args TEXT NOT NULL,
-    nest_level INTEGER NOT NULL DEFAULT 1
+    args TEXT NOT NULL
 )
 _
     $dbh->do(<<_) or return "$ep create undo_step: ".$dbh->errstr;
@@ -157,7 +155,7 @@ CREATE TABLE IF NOT EXISTS _meta (
 _
     $dbh->do(<<_) or return "$ep insert v: ".$dbh->errstr;
 -- v is incremented everytime schema changes
-INSERT OR IGNORE INTO _meta VALUES ('v', '2')
+INSERT OR IGNORE INTO _meta VALUES ('v', '3')
 _
 
     # deal with table structure changes
@@ -166,11 +164,71 @@ _
         my ($v) = $dbh->selectrow_array(
             "SELECT value FROM _meta WHERE name='v'");
         if ($v eq '1') {
+            $dbh->begin_work;
+
+            # add 'nest_level' column
             $dbh->do("ALTER TABLE call ADD COLUMN ".
-                         "nest_level INTEGER NOT NULL DEFAULT 1")
-                or return "$ep alter1.1: ".$dbh->errstr;
+                         "nest_level INTEGER NOT NULL DEFAULT 1");
             $dbh->do("UPDATE _meta SET value='2' WHERE name='v'")
                 or return "$ep update v 1->2: ".$dbh->errstr;
+
+            $dbh->commit;
+        } elsif ($v eq '2') {
+            $dbh->begin_work;
+
+            # replace last_call_id column with last_step_id
+            $dbh->do("CREATE TEMPORARY TABLE tx_backup (
+    ser_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    str_id VARCHAR(200) NOT NULL,
+    owner_id VARCHAR(64) NOT NULL,
+    summary TEXT,
+    status CHAR(1) NOT NULL, -- i, a, C, U, R, u, d, X, (e) [uppercase=final]
+    ctime REAL NOT NULL,
+    commit_time REAL,
+    last_step_id INTEGER, -- last processed step when rollback
+    UNIQUE (str_id)
+)");
+            $dbh->do("INSERT INTO tx_backup
+    SELECT ser_id,str_id,owner_id,summary,status,ctime,commit_time,null FROM tx"
+                 );
+            $dbh->do("DROP TABLE tx");
+            $dbh->do("CREATE TABLE tx (
+    ser_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    str_id VARCHAR(200) NOT NULL,
+    owner_id VARCHAR(64) NOT NULL,
+    summary TEXT,
+    status CHAR(1) NOT NULL, -- i, a, C, U, R, u, d, X, (e) [uppercase=final]
+    ctime REAL NOT NULL,
+    commit_time REAL,
+    last_step_id INTEGER, -- last processed step when rollback
+    UNIQUE (str_id)
+)");
+            $dbh->do("DROP TABLE tx_backup");
+
+            # drop 'nest_level' column, turns out we don't need it
+            $dbh->do("CREATE TEMPORARY TABLE call_backup(
+    tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    ctime REAL NOT NULL,
+    f TEXT NOT NULL,
+    args TEXT NOT NULL
+)");
+            $dbh->do("INSERT INTO call_backup
+    SELECT tx_ser_id,id,ctime,f,args FROM call");
+            $dbh->do("DROP TABLE call");
+            $dbh->do("CREATE TABLE call (
+    tx_ser_id INTEGER NOT NULL, -- refers tx(ser_id)
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    ctime REAL NOT NULL,
+    f TEXT NOT NULL,
+    args TEXT NOT NULL
+)");
+            $dbh->do("INSERT INTO call SELECT * FROM call_backup");
+            $dbh->do("DROP TABLE call_backup");
+            $dbh->do("UPDATE _meta SET value='3' WHERE name='v'")
+                or return "$ep update v 2->3: ".$dbh->errstr;
+            $dbh->commit;
+
         } else {
             # already the latest schema version
             last UPDATE_SCHEMA;
@@ -232,37 +290,6 @@ sub _commit_dbh {
     $res;
 }
 
-sub _get_undo_or_redo_steps {
-    my ($self, $which, %args) = @_;
-    my $call_id = $args{call_id} or return [400, "Please specify call_id"];
-    my $dbh = $self->{_dbh};
-    my $t = $which eq 'undo' ? 'undo_step' : 'redo_step';
-    my $sth = $dbh->prepare(
-        "SELECT data FROM $t WHERE call_id=? ORDER BY ctime, ROWID");
-    $sth->execute($call_id) or return [500, "db: Can't select: ".$dbh->errstr];
-    my @steps;
-    my $i = 0;
-    while (my @row = $sth->fetchrow_array) {
-        $i++;
-        my $step;
-        eval { $step = $json->decode($row[0]) };
-        return [500, "Step #$i is not deserializable from JSON: $@"] if $@;
-        push @steps, $step;
-    }
-    @steps = reverse(@steps);
-    [200, "OK", \@steps];
-}
-
-sub get_undo_steps {
-    my $self = shift;
-    $self->_get_undo_or_redo_steps('undo', @_);
-}
-
-sub get_redo_steps {
-    my $self = shift;
-    $self->_get_undo_or_redo_steps('redo', @_);
-}
-
 # return undef on success, or an error string on failure
 sub _rollback_or_undo_or_redo {
     my ($self, $which) = @_;
@@ -301,7 +328,7 @@ sub _rollback_or_undo_or_redo {
     my $oss = $which eq 'rollback' ? "'i','u','d'" :
         $which eq 'undo' ? "'C'" : "'U'";
     eval {
-        $dbh->do("UPDATE tx SET status='$ns', last_call_id=NULL ".
+        $dbh->do("UPDATE tx SET status='$ns', last_step_id=NULL ".
                      "WHERE ser_id=? AND status IN ($oss)",
                  {}, $tx->{ser_id})
             or die "db: Can't update tx status $oss -> $ns: ".$dbh->errstr;
@@ -311,19 +338,56 @@ sub _rollback_or_undo_or_redo {
                                       {}, $tx->{ser_id});
         die "Status incorrect ($r[0])" unless $r[0] eq $ns;
 
-        my $lci = $tx->{last_call_id};
-        my $rows = $dbh->selectall_arrayref(
-            "SELECT id, f, args FROM call WHERE tx_ser_id=? AND nest_level=1 ".
-                ($lci ? "AND (id<>$lci AND ".
-                     "ctime >= (SELECT ctime FROM call WHERE id=$lci))" : "").
-                    "ORDER BY ctime, id",
-            {}, $tx->{ser_id});
-        for (@$rows) {
-            push @calls, {id=>$_->[0], f=>$_->[1],
-                          args=>$json->decode($_->[2])};
+        # collect all steps and group them into calls
+
+        my $t = $which eq 'redo' ? 'redo_step' : 'undo_step';
+        my $lsi = $tx->{last_step_id};
+        my $steps = $dbh->selectall_arrayref(join(
+            "",
+            "SELECT s.ROWID AS id, s.call_id AS call_id,",
+            "  s.ctime AS ctime, s.data AS data FROM $t s ",
+            "LEFT JOIN call c ON s.call_id=c.id WHERE c.tx_ser_id=? ",
+            ($lsi ? "AND (s.ROWID<>$lsi AND ".
+                 "s.ctime <= (SELECT ctime FROM $t WHERE id=$lsi))":""),
+            "ORDER BY s.ctime, s.ROWID"),
+                                            {}, $tx->{ser_id});
+        $steps = [reverse @$steps] unless $which eq 'redo';
+        $log->tracef("TMP:steps=%s", $steps);
+        my $ca;
+        if (@$steps) {
+            $ca = $dbh->selectall_arrayref(join(
+                "",
+                "SELECT id, f, args FROM call WHERE id IN (",
+                join(",", map {$_->[1]} @$steps), ")"));
+        } else {
+            $ca = [];
         }
-        @calls = reverse(@calls) unless $which eq 'redo';
-        #$log->tracef("[txm] [$which] Calls to perform: %s", \@calls);
+        my %ch;
+        for (@$ca) {
+            eval { $_->[2] = $json->decode($_->[2]) };
+            die "Can't decode JSON for call id $_->[0]: $@" if $@;
+            $ch{$_->[0]} = {f=>$_->[1], args=>$_->[2]};
+        }
+        $log->tracef("TMP:ch=%s", \%ch);
+        while (1) {
+            my @cs;
+            last unless @$steps;
+            my $cid = $steps->[0][1];
+            while (@$steps && $steps->[0][1] == $cid) {
+                eval { $steps->[0][3] = $json->decode($steps->[0][3]) };
+                die "Can't decode JSON for step id $steps->[0][0]: $@" if $@;
+                push @cs, {
+                    id=>$steps->[0][0],
+                    ctime=>$steps->[0][2], data=>$steps->[0][3],
+                };
+                shift @$steps;
+            }
+            push @calls, {
+                id=>$cid, f=>$ch{$cid}{f}, args=>$ch{$cid}{args}, steps=>\@cs};
+        }
+        $log->tracef("[txm] [$which] Calls to perform: %s", \@calls);
+
+        # perform the calls
 
         $i_call = 0;
         for (@calls) {
@@ -338,6 +402,7 @@ sub _rollback_or_undo_or_redo {
             $res = $func->(
                 %{$call->{args}},
                 -undo_action=>($which eq 'redo' ? 'redo' : 'undo'),
+                -undo_data=>[ map {$_->{data}} @{ $call->{steps} }],
                 -tx_manager=>$self, -tx_call_id=>$call->{id},
                 # the following special arg is just informative, so function
                 # knows and can act more robust under rollback if it needs to
@@ -347,10 +412,11 @@ sub _rollback_or_undo_or_redo {
             die "Call failed: $res->[0] - $res->[1]"
                 unless $res->[0] == 200 || $res->[0] == 304;
 
-            # update last_call so we don't have to repeat all calls when we
+            # update last_step_id so we don't have to repeat all steps when we
             # resume a failed rollback. error can be ignored here, i think.
-            $dbh->do("UPDATE tx SET last_call_id=? WHERE ser_id=?", {},
-                     $call->{id}, $tx->{ser_id}) if $which eq 'rollback';
+            $dbh->do("UPDATE tx SET last_step_id=? WHERE ser_id=?", {},
+                     $call->{steps}[0]{id}, $tx->{ser_id}) if
+                         $which eq 'rollback' && @{$call->{steps}};
         }
         if ($which eq 'undo' || $which eq 'redo') {
             my $t = $which eq 'undo' ? 'undo_step' : 'redo_step';
@@ -663,10 +729,9 @@ sub record_call {
             my $dbh = $self->{_dbh};
             my $f = $args{f} // $caller[3];
             $dbh->do(
-                "INSERT INTO call (tx_ser_id, ctime, f, args, nest_level) ".
-                    "VALUES (?,?,?,?,?)", {},
-                $self->{_cur_tx}{ser_id}, $self->{_now}, $f, $eargs,
-                $self->{_nest_level})
+                "INSERT INTO call (tx_ser_id, ctime, f, args) ".
+                    "VALUES (?,?,?,?)", {},
+                $self->{_cur_tx}{ser_id}, $self->{_now}, $f, $eargs)
                 or return [532, "db: Can't insert call: ".$dbh->errstr];
             return [200, "OK", $dbh->last_insert_id('','','','')];
         },
@@ -937,18 +1002,6 @@ require it.
 This is just a convenience so that methods that require tx_id will get the
 default value from here if tx_id not specified in arguments.
 
-=head2 _nest_level
-
-Nest level (by default 1, the outermost, increases by one for each increased
-nest level). A transactional function can call another transactional function,
-and that subcall constitutes a nesting.
-
-Internally, subcalls are also recorded in the C<call> table, and its undo/redo
-steps in the C<undo_step>/C<redo_step> table. However, during
-rollback/undo/redo, the transaction manager only directly processes outermost
-calls (those with nest_level=1). The function is responsible for using the
-subcall (and its steps) information.
-
 
 =head1 METHODS
 
@@ -1050,20 +1103,6 @@ Record a redo step. This method needs to be called before performing an undo
 step.
 
 Arguments: tx_id, call_id, data (an array).
-
-=head2 $tx->get_undo_steps(%args) => RESP
-
-Will return (in enveloped response) an array of undo steps, e.g. [200, "OK",
-[["step1"], ["step2", "arg"], ...]] for the particular call.
-
-Arguments: tx_id, call_id.
-
-=head2 $tx->get_redo_steps(%args) => RESP
-
-Will return (in enveloped response) an array of redo steps, e.g. [200, "OK",
-[["step2"], ["step1"], ...]] for the particular call.
-
-Arguments: tx_id, call_id.
 
 =head2 $tx->get_trash_dir => RESP
 
