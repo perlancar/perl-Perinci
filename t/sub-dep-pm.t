@@ -31,8 +31,8 @@ sub deps_unmet {
 }
 # END copy-pasted code
 
-deps_met   {pm=>"Foo"}, "pm 1";
-deps_unmet {pm=>"Foo >= 0.21"}, "pm 2";
+deps_met   {pm=>"TestDep"}, "pm 1";
+deps_unmet {pm=>"TestDep >= 0.41"}, "pm 2";
 deps_unmet {pm=>"NonExistingModule"}, "pm 3";
 
 done_testing();
