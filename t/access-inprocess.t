@@ -3,6 +3,9 @@
 use 5.010;
 use strict;
 use warnings;
+use FindBin '$Bin';
+use lib "$Bin/lib";
+
 use Test::More 0.96;
 
 use File::chdir;
@@ -636,7 +639,7 @@ subtest "transaction" => sub {
     };
     # txs: f1(R), s2(C), f2(R), r1(R)
 
-    # TODO cannot discard transactions in states i, ...
+    # TODO test cannot discard transactions in states i, ...
 
     subtest 'discard_all_txs' => sub {
         # commit some txs first
@@ -668,6 +671,63 @@ subtest "transaction" => sub {
         );
     };
     # txs: f1(R), f2(R), r1(R)
+
+    subtest 'nested_call' => sub {
+        my $txid = "n1";
+        test_request(req => [begin_tx=>"/" , {tx_id=>$txid}], status => 200);
+        test_request(
+            req => [call=>"/TestNested/setup_two_symlinks",
+                    {args=>{symlink1=>"$tmp_dir/$txid-l1", target1=>"t1",
+                            symlink2=>"$tmp_dir/$txid-l2", target2=>"t2",},
+                     tx_id=>$txid}],
+            status => 200,
+        );
+        test_request(
+            req => [commit_tx=>"/", {tx_id=>$txid}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(detail=>1, tx_id=>$txid);
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
+
+                ok((-l "$tmp_dir/$txid-l1"),"final state of $txid(l1) = done");
+                ok((-l "$tmp_dir/$txid-l2"),"final state of $txid(l2) = done");
+            },
+        );
+        test_request(
+            req => [undo=>"/", {tx_id=>$txid}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(detail=>1, tx_id=>$txid);
+                is($tres->[2][0]{tx_status}, "U", "Transaction status is U");
+
+                ok(!(-l "$tmp_dir/$txid-l1"),"final state of $txid(l1)=undone");
+                ok(!(-l "$tmp_dir/$txid-l2"),"final state of $txid(l2)=undone");
+            },
+        );
+        test_request(
+            req => [redo=>"/", {tx_id=>$txid}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(detail=>1, tx_id=>$txid);
+                is($tres->[2][0]{tx_status}, "C", "Transaction status is C");
+
+                ok((-l "$tmp_dir/$txid-l1"),"final state of $txid(l1) = done");
+                ok((-l "$tmp_dir/$txid-l2"),"final state of $txid(l2) = done");
+            },
+        );
+        test_request(
+            req => [undo=>"/", {tx_id=>$txid}],
+            status => 200,
+            posttest => sub {
+                my $tres = $txm->list(detail=>1, tx_id=>$txid);
+                is($tres->[2][0]{tx_status}, "U", "Transaction status is U");
+
+                ok(!(-l "$tmp_dir/$txid-l1"),"final state of $txid(l1)=undone");
+                ok(!(-l "$tmp_dir/$txid-l2"),"final state of $txid(l2)=undone");
+            },
+        );
+    };
+    # txs: f1(R), f2(R), r1(R), n1(U)
 
     # TODO in-progress transaction cannot be discarded
 
