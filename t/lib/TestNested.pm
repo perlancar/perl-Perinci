@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Log::Any '$log';
 
-use Perinci::Sub::Gen::Undoable qw(gen_undoable_func);
+use Perinci::Sub::Gen::Undoable 0.20 qw(gen_undoable_func);
 use Setup::File::Symlink;
 
 our %SPEC;
@@ -29,12 +29,15 @@ _
         my $args = shift;
 
         [200, "OK", [
-            ['Common::call' => 'Setup::File::Symlink::setup_symlink', {symlink=>$args->{symlink1}, target=>$args->{target1}}],
-            ['Common::call' => 'Setup::File::Symlink::setup_symlink', {symlink=>$args->{symlink2}, target=>$args->{target2}}],
+            ['call' => 'Setup::File::Symlink::setup_symlink', {symlink=>$args->{symlink1}, target=>$args->{target1}}],
+            ['call' => 'Setup::File::Symlink::setup_symlink', {symlink=>$args->{symlink2}, target=>$args->{target2}}],
         ]];
     },
 
-    steps => {},
+    steps => {
+        call => 'Common::call',
+        call_undo => 'Common::call_undo',
+    },
 );
 die "Can't generate function: $res->[0] - $res->[1]" unless $res->[0] == 200;
 
