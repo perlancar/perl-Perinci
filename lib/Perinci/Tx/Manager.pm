@@ -352,7 +352,6 @@ sub _rollback_or_undo_or_redo {
             "ORDER BY s.ctime, s.ROWID"),
                                             {}, $tx->{ser_id});
         $steps = [reverse @$steps] unless $which eq 'redo';
-        $log->tracef("TMP:steps=%s", $steps);
         my $ca;
         if (@$steps) {
             $ca = $dbh->selectall_arrayref(join(
@@ -368,7 +367,6 @@ sub _rollback_or_undo_or_redo {
             die "Can't decode JSON for call id $_->[0]: $@" if $@;
             $ch{$_->[0]} = {f=>$_->[1], args=>$_->[2]};
         }
-        $log->tracef("TMP:ch=%s", \%ch);
         while (1) {
             my @cs;
             last unless @$steps;
@@ -385,7 +383,7 @@ sub _rollback_or_undo_or_redo {
             push @calls, {
                 id=>$cid, f=>$ch{$cid}{f}, args=>$ch{$cid}{args}, steps=>\@cs};
         }
-        $log->tracef("[txm] [$which] Calls to perform: %s", \@calls);
+        #$log->tracef("[txm] [$which] Calls to perform: %s", \@calls);
 
         # perform the calls
 
@@ -393,8 +391,11 @@ sub _rollback_or_undo_or_redo {
         for (@calls) {
             $call = $_;
             $i_call++;
-            $log->tracef("[txm] [$which] Performing call %d/%d: %s(%s) ...",
-                         $i_call, scalar(@calls), $call->{f}, $call->{args});
+            my $undo_data = [ map {$_->{data}} @{ $call->{steps} }];
+            $log->tracef("[txm] [$which] Performing call %d/%d: %s(%s), ".
+                           "undo_data: %s ...",
+                         $i_call, scalar(@calls), $call->{f}, $call->{args},
+                         $undo_data);
             my $res = $self->_get_func_and_meta($call->{f});
             die "Can't get func: $res->[0] - $res->[1]" unless $res->[0] == 200;
             my ($func, $meta) = @{$res->[2]};
@@ -402,7 +403,7 @@ sub _rollback_or_undo_or_redo {
             $res = $func->(
                 %{$call->{args}},
                 -undo_action=>($which eq 'redo' ? 'redo' : 'undo'),
-                -undo_data=>[ map {$_->{data}} @{ $call->{steps} }],
+                -undo_data=>$undo_data,
                 -tx_manager=>$self, -tx_call_id=>$call->{id},
                 # the following special arg is just informative, so function
                 # knows and can act more robust under rollback if it needs to
