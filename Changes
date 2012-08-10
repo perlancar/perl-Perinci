@@ -1,5 +1,13 @@
 Revision history for Perinci
 
+0.28     2012-08-10 (SHARYANTO)
+
+         Code now split into their own distributions: Perinci-Access,
+         Perinci-Result-Format, Perinci-Tx-Manager, etc. This is done to avoid
+         circular dependencies problem. This distribution now only contain
+         documentation.
+
+
 0.27     2012-08-10 (SHARYANTO)
 
          - txm: Handle nested call in transaction (Rinci 1.1.22) (finish WIP
