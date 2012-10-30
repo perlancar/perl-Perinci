@@ -64,7 +64,7 @@ See CPAN for more C<Perinci::Sub::Gen::*> modules.
 
 =item * Others
 
-Samples: L<Perinci::Use>, L<Perinci::Exporter>.
+Samples: L<Perinci::Use>, L<Perinci::Exporter>, L<Test::Rinci>.
 
 See CPAN for more Perinci::* modules.
 
