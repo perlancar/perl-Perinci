@@ -5,26 +5,6 @@ package Perinci;
 1;
 # ABSTRACT: Collection of Perl modules for Rinci and Riap
 
-=head1 STATUS
-
-Most modules have been implemented. It is safe to start putting metadata to your
-code. However, some have not:
-
-=over 4
-
-=item * Argument validation
-
-L<Perinci::Sub::Wrapper> still does not generate code to validate function
-arguments. This is because the L<Sah> schema is still somewhat in flux and
-largely unimplemented.
-
-I usually do some manual and minimal argument validation manually in the
-function body. They can be removed once the wrapper generates validation code,
-or left as-is (sometimes the function is used unwrapped).
-
-=back
-
-
 =head1 DESCRIPTION
 
 Perinci is a collection of modules for implementing/providing tools pertaining
@@ -37,8 +17,8 @@ incremental releases. These tools include:
 
 L<Perinci::Sub::Wrapper> is the subroutine wrapper which implements/enforces
 many of the metadata properties, like argument validation (using information in
-C<args>) as well as offers features like convert argument passing style,
-automatically envelope function result, etc.
+C<args>) as well as offers features like assign default values, convert argument
+passing style, automatically envelope function result, etc.
 
 It is extensible so you can implement wrapper for your properties too.
 
@@ -80,7 +60,7 @@ These are convenient tools to generate common/generic function and/or metadata.
 For example, L<Perinci::Sub::Gen::AccessTable> can generate accessor function +
 metadata for table data.
 
-See CPAN for more Perinci::Sub::Gen::* modules.
+See CPAN for more C<Perinci::Sub::Gen::*> modules.
 
 =item * Others
 
