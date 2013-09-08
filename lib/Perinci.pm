@@ -24,7 +24,7 @@ It is extensible so you can implement wrapper for your properties too.
 
 =item * Riap clients and servers (Perinci::Access::*)
 
-L<Perinci::Access::InProcess> is a client/server (well, neither really, since
+L<Perinci::Access::Perl> is a client/server (well, neither really, since
 everything is in-process) to access Perl modules/functions using the Riap
 protocol. It is basically a way to call your modules/functions using URI syntax;
 it also dictates a bit on how you should write your functions and where to put
