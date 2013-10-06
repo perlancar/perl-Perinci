@@ -109,8 +109,9 @@ Let us write our first function metadata.
  }
 
 Metadata is a hashref, put in the C<%SPEC> package variable, under the key name
-that is the same as the function name. It actually doesn't have to be put there,
-but that is the default location.
+that is the same as the function name. (There is a way to put and look for
+metadata in other locations, like in a database, but the default location is in
+C<%SPEC>.)
 
 Now our function is nice and short again. But at first glance, the metadata does
 contain quite a few items (some seem weird and needless). Let us go through them
