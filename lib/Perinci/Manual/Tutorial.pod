@@ -344,7 +344,7 @@ Then run (make sure first that MyApp.pm is in Perl's @INC search path):
 This will start a web server, by default at port 5000. To request to this
 server:
 
- % curl -g 'http://localhost:5000/MyApp/add_array?a1=[1,2,3]&a2=[4,5,6]'
+ % curl -g 'http://localhost:5000/MyApp/add_array?a1:k=[1,2,3]&a2:j=[4,5,6]'
  .------.
  |    5 |
  |    7 |
@@ -353,7 +353,7 @@ server:
 
 To pass special arguments:
 
- % curl -g 'http://localhost:5000/MyApp/add_array?a1=[1,2,3]&a2=[4,5,6]&-riap-fmt=json'
+ % curl -g 'http://localhost:5000/MyApp/add_array?a1:j=[1,2,3]&a2:j=[4,5,6]&-riap-fmt=json'
  [200,"OK",[5,7,9]]
 
 Most things are configurable, from URL dispatching routes to parameter parsing.
@@ -372,7 +372,7 @@ get metadata for a code entity, use the C<meta> action:
      req: 1
      schema:
      - array
-     - of: num*
+     - of: num
        req: 1
      summary: The first array
    a2:
@@ -380,7 +380,7 @@ get metadata for a code entity, use the C<meta> action:
      req: 1
      schema:
      - array
-     - of: num*
+     - of: num
        req: 1
      summary: The second array
  args_as: hash
@@ -465,14 +465,14 @@ result:
 As you can see, if you do this, you no longer have to state that your results
 are naked. Let us see how this works in CLI and over HTTP:
 
- % myapp --a1 '[]' --a2 '[1]'
+ % myapp --a1-json '[]' --a2-json '[1]'
  ERROR 400: Arrays are not of same length
 
- % curl -g 'http://localhost:5000/MyApp/add_array?a1=[]&a2=[1]&-riap-fmt=json'
+ % curl -g 'http://localhost:5000/MyApp/add_array?a1:j=[]&a2:j=[1]&-riap-fmt=json'
  [400,"Arrays are not of same length"]
 
 Wrapper can convert your function from generating naked result to enveloped or
-vice versa. For example, a user do not like envelopes. She can export your
+vice versa. For example, say a user does not like envelopes. She can export your
 function like this:
 
  use MyApp add_array => {result_naked=>1};
