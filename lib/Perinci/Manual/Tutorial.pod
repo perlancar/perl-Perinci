@@ -92,7 +92,7 @@ Let us write our first function metadata.
  $SPEC{add_array} = {
      v            => 1.1,
      result_naked => 1,
-     args_as      => array,
+     args_as      => 'array',
      args         => {
          a1 => { schema => ['array*' => {of=>'num*'}], pos => 0 },
          a2 => { schema => ['array*' => {of=>'num*'}], pos => 1 },
