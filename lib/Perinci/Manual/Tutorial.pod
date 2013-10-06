@@ -244,7 +244,7 @@ Now create a script C<myapp>:
 
 To execute the program:
 
- % myapp --a1 '[1,2,3]' --a2 '[4,5,6]'
+ % myapp --a1-json '[1,2,3]' --a2-json '[4,5,6]'
  % myapp '[1,2,3]' '[4,5,6]';           # ditto
  .------.
  |    5 |
@@ -305,10 +305,10 @@ Several things worth noting:
 
 Instead of using Perl package and function names directly, Perinci::CmdLine
 refers to code entities using Riap URLs. This means C<MyApp::add_array> becomes
-C</MyApp/add_array> (actually C<pl:/MyApp/add_array>). Other schemes are
-available, including http/https and tcp/unix/pipe. This means, Perinci::CmdLine
-can provide command-line interface for remote code entities. Many other Perinci
-tools also operate on URLs and thus share the remote access capability.
+C</MyApp/add_array> (or C<pl:/MyApp/add_array>). Other schemes are available,
+including http/https and tcp/unix/pipe. This means, Perinci::CmdLine can provide
+command-line interface for remote code entities. Many other Perinci tools also
+operate on URLs and thus share the remote access capability.
 
 =item * Parsing argument value
 
