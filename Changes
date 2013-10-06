@@ -1,5 +1,10 @@
 Revision history for Perinci
 
+0.30     2013-10-06 (SHARYANTO)
+
+         - Update and some fixes to tutorial.
+
+
 0.29     2013-09-09 (SHARYANTO)
 
          - No functional changes, fix typos and rebuild with MakeMaker instead
