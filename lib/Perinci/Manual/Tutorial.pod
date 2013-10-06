@@ -182,14 +182,11 @@ Now let us use our function again:
  add_array();             # now dies: "Missing arguments a1, a2"
 
 How does it work? Perinci::Exporter exports a wrapped version of the function.
-Function is wrapped using L<Perinci::Sub::Wrapper>. It adds argument validation,
-among many other things like timeouts, automatic retries, post-processing of
-function result, exception handling, rate-limiting, etc. All wrapping is done
-using instructions specified in the metadata.
-
-(Note: argument validation actually does not work yet, I'm still working on it,
-please check back the status of Perinci::Sub::Wrapper and L<Data::Sah>
-regularly. Most of the other properties already work though.)
+Function is wrapped using L<Perinci::Sub::Wrapper>. The module generates an
+anonymous subroutine that does argument validation (among other things) before
+calling the actual function. It also does things after calling function, e.g.
+automatic retries, post-processing of function result, etc. The list of things
+that the wrapper does is determined by settings in the metadata.
 
 
 =head1 COMMAND-LINE PROGRAMS
