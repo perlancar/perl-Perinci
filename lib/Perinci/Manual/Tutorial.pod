@@ -420,6 +420,10 @@ using the Riap actions C<list> and C<meta>, we have a self-documenting and
 discoverable web service. This is applicable to every service implementing the
 Riap protocol.
 
+Aside from using raw HTTP clients like B<curl> or B<wget>, there are also a few
+other tools more specialized to Riap, e.g. L<riap> (a command-line Riap client
+shell).
+
 
 =head1 ENVELOPED RESULT
 
