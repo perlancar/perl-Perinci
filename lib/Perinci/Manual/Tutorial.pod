@@ -509,15 +509,6 @@ Rinci metadata can also be added to classes, methods, and attributes. However,
 this is not specified in detail yet. Inputs and comments welcome.
 
 
-=head1 TODO
-
-=over 4
-
-=item * args_as has not been discussed
-
-=back
-
-
 =head1 SEE ALSO
 
 L<Rinci>, L<Riap>
