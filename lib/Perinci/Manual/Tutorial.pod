@@ -55,7 +55,7 @@ To use this function:
 But suppose we want to check our input to make sure we are fed arrays of
 numbers:
 
- use Scalar::Util qw(reftype looks_like_number);
+ use Scalar::Util qw(looks_like_number);
  sub add_array {
      my ($a1, $a2) = @_;
 
